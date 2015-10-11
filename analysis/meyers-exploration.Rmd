@@ -1,0 +1,77 @@
+---
+title: "Exploring Meyers’ Work"
+author: "Will Jones"
+date: "October 11, 2015"
+output: html_document
+---
+
+Rennie Meyers, in her Math 241 Final Project did some work with the RIDE data
+set, mainly creating maps and exploring the data with different overlays.
+
+Here I want to walk through some of what she did. (Most of the code is adapted
+from Meyers' project, which can be found [here](https://github.com/ReedCollegeMATH241/MATH241_PortlandBikeWorks).)
+
+Data sources:
+
+- [Portland Bicycle Network](http://www.civicapps.org/datasets/bicycle-network):
+this is from the Portland, OR Civicapps website, and contains all created and 
+planned bicycle boulevards, bike lanes, multi-use trails, and signed connections
+from February 26, 2010.
+- Ride Trips: A geojson file containing several thousand bike trips on the RIDE
+app.
+
+
+```{r, cache=TRUE}
+# Load the data
+library(RJSONIO)
+library(dplyr)
+library(ggplot2)
+library(rgdal)
+library(ggmap)
+
+#load data
+PDX <- fromJSON("data/RIDE/trips.json")
+```
+
+```{r, cache=TRUE}
+##ride data
+# Extract information for first ride
+orig.coordinates <- PDX[["features"]][[1]]$geometry$coordinates %>% unlist() %>% matrix(ncol=2, byrow=TRUE)
+coordinates <- data.frame(
+  lat = orig.coordinates[, 1],
+  long = orig.coordinates[, 2],
+  activity_type = PDX[["features"]][[1]]$properties["activity_type"],
+  rating = PDX[["features"]][[1]]$properties["rating"],
+  group = 1
+)
+
+# Create master data.frame
+master.coordinates <- coordinates
+
+# Append information for 2nd thru last ride
+for(i in 2:length(PDX[["features"]])){
+  orig.coordinates <- PDX[["features"]][[i]]$geometry$coordinates %>% unlist() %>% matrix(ncol=2, byrow=TRUE)
+  coordinates <- data.frame(
+    lat = orig.coordinates[, 1],
+    long = orig.coordinates[, 2],
+    activity_type = PDX[["features"]][[i]]$properties["activity_type"],
+    rating = PDX[["features"]][[i]]$properties["rating"],
+    group = i
+  )
+  master.coordinates <- bind_rows(master.coordinates, coordinates)
+}
+```
+
+
+```{r}
+ggplot(master.coordinates, aes(x=long, y=lat, group=group)) + 
+  geom_path(alpha=0.3, aes(col=rating), lineend = "butt") +
+  scale_color_gradient2(low = "yellow", mid = "green", high = "red") +
+  scale_x_continuous(limits=c(-122.7, -122.6)) +
+  scale_y_continuous(limits=c(45.475, 45.55)) +
+  coord_map() +
+  xlab("Longitude") + ylab("Latitude") + 
+  ggtitle("RIDE Data for PDX by Rating")  +
+  labs(color = "Ride Rating")
+```
+
