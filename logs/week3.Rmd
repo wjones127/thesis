@@ -1,0 +1,31 @@
+---
+title: "week3"
+author: "Will Jones"
+date: "October 10, 2015"
+output: html_document
+---
+
+# Week 3
+
+This week was not a productive week for this thesis. But I will take this time
+right now to jot down some older thoughts I have had.
+
+## Within rider variation versus rider to rider variation
+This is based on what I talked about with Andrew, my thesis advisor.
+
+Obviously, different people will rate the same route differently. But there are
+different ways to model this. Here are three:
+
+1. Assume the variation is simply due to varying street conditions. Thus, there
+is a probability that a person had a bad experience on a street, and this is
+independent from what person it is.
+2. Assume the variation is mostly between riders. That is, riders will
+consistently give roughly the same rating for a given route, but different
+riders will have very different preference. This might mean there are different
+clusters of riders, such as those who don't like riding in traffic and those
+that are totally comfortable with that.
+3. Assume the variation is mostly within riders. That is, there is no signifcance
+in the distribution one rider will rate a route than another rider.
+
+The good news is that we can test on which of these assumptions is the most
+accurate. I will need to do some more testing to figure this out.
