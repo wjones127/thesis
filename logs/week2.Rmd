@@ -1,0 +1,37 @@
+---
+title: "week2"
+author: "Will Jones"
+date: "September 30, 2015"
+output: html_document
+---
+
+# Week 2
+
+This week, I met with William Henderson and Evan Heidtmann at Ride Report to
+talk about their data and read over the paper on ambulance data from last week.
+
+## Meeting with William
+William is very supportive of me working with the data. Their goal with their
+project is to release an API that orgnizations will want to pay for later, and
+they are allowing researchers to use their data so that he can get an idea of
+what kind of API endpoints should be built in at the beginning.
+
+One thing they need to balance is getting the right data to people while
+protecting the privacy of people who contribute to the data. Thus, if I want
+to run models on data from individual rides, I will have to bring in a script
+to run and have them run it on the data, rather than play with the data. They
+are very willing to do this.
+
+In the meantime I do have that sample from Rennie's project. It is not matched
+to road though. They offered to give me a new dataset from some consenting
+bicylcists for that, or I could snap the data to the roads myself. I might
+consider doing that myself.
+
+They had mentioned that other people are working on different angles of the
+data, including using the recorded routes to infer bicyclists preference of
+roads. It is probably notable that missing data in this case has meaning:
+a roads through which no one rides is likely not a good road to ride on, even
+if there are no ratings.
+
+## Ambulance paper
+
