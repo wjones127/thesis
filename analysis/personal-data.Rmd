@@ -1,0 +1,40 @@
+---
+title: "Personal Data"
+author: "Will Jones"
+date: "October 26, 2015"
+output: 
+  html_document: 
+    keep_md: yes
+    theme: readable
+---
+
+```{r, echo=FALSE, warning=FALSE}
+p <- c("rgdal", "ggplot2", "dplyr")
+lapply(p, require, character.only = TRUE)
+```
+
+Here we have data provided by William Henderson, containing data from 5 riders.
+
+
+```{r}
+bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGeoJSON", p4s="+proj=tmerc +ellps=WGS84")
+
+bikeroutes.df <- fortify(bikeroutes.shapefile)
+
+head(bikeroutes.df)
+
+ggplot(bikeroutes.df, aes(x=long, y=lat, group=group)) + geom_path()
+```
+
+This seems to include locations outside of Portland, OR. So let's filter this data.
+
+```{r}
+# TODO: filter by rides/groups/lines, not individual points
+bikeroutes.df <- bikeroutes.df %>%
+  filter(lat > 45.462 & lat < 45.549) %>%
+  filter(long < -122.577 & long > -122.722)
+
+ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path()
+```
+
+That's quite a bit of coverage for only five people!
