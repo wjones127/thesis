@@ -3,39 +3,6 @@ Will Jones
 October 26, 2015  
 
 
-```
-## Loading required package: rgdal
-## Loading required package: sp
-## rgdal: version: 0.9-1, (SVN revision 518)
-## Geospatial Data Abstraction Library extensions to R successfully loaded
-## Loaded GDAL runtime: GDAL 1.11.2, released 2015/02/10
-## Path to GDAL shared files: /Library/Frameworks/GDAL.framework/Versions/1.11/Resources/gdal
-## Loaded PROJ.4 runtime: Rel. 4.9.1, 04 March 2015, [PJ_VERSION: 480]
-## Path to PROJ.4 shared files: (autodetected)
-## Loading required package: ggplot2
-## Loading required package: dplyr
-## 
-## Attaching package: 'dplyr'
-## 
-## The following objects are masked from 'package:stats':
-## 
-##     filter, lag
-## 
-## The following objects are masked from 'package:base':
-## 
-##     intersect, setdiff, setequal, union
-```
-
-```
-## [[1]]
-## [1] TRUE
-## 
-## [[2]]
-## [1] TRUE
-## 
-## [[3]]
-## [1] TRUE
-```
 
 Here we have data provided by William Henderson, containing data from 5 riders.
 
@@ -78,12 +45,14 @@ This seems to include locations outside of Portland, OR. So let's filter this da
 
 
 ```r
+# TODO: filter by rides/groups/lines, not individual points
 bikeroutes.df <- bikeroutes.df %>%
-  filter(lat > 45.462 && lat < 45.549) %>%
-  filter(long < -122.577 && long > -122.722)
+  filter(lat > 45.462 & lat < 45.549) %>%
+  filter(long < -122.577 & long > -122.722)
 
 ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path()
 ```
 
 ![](personal-data_files/figure-html/unnamed-chunk-3-1.png) 
 
+That's quite a bit of coverage for only five people!

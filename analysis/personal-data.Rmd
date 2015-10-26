@@ -9,14 +9,15 @@ output:
 ---
 
 ```{r, echo=FALSE, warning=FALSE}
-p <- c("rgdal", "ggplot2", "dplyr")
-lapply(p, require, character.only = TRUE)
+suppressPackageStartupMessages(library(rgdal))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
 ```
 
 Here we have data provided by William Henderson, containing data from 5 riders.
 
 
-```{r}
+```{r, cache=TRUE}
 bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGeoJSON", p4s="+proj=tmerc +ellps=WGS84")
 
 bikeroutes.df <- fortify(bikeroutes.shapefile)
