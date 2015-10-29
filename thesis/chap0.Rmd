@@ -1,7 +1,5 @@
 ---
-output:
-  pdf_document:
-    keep_tex: true
+output: pdf_document
 ---
 
 <!-- The {.unnumbered} option here means that the introduction will be "Chapter 0." -->
