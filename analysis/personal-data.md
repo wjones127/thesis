@@ -22,6 +22,9 @@ bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGe
 ```r
 bikeroutes.df <- fortify(bikeroutes.shapefile)
 
+# bikeroutes.df <- bikeroutes.df %>%
+#   left_join(bikeroutes.shapefile@data, by="pk")
+
 head(bikeroutes.df)
 ```
 
@@ -41,6 +44,112 @@ ggplot(bikeroutes.df, aes(x=long, y=lat, group=group)) + geom_path()
 
 ![](personal-data_files/figure-html/unnamed-chunk-2-1.png) 
 
+Okay. The data produced by fortifying the bikeroutes dataframe is rather strange.
+
+
+```r
+barplot(table(bikeroutes.df$order))
+```
+
+![](personal-data_files/figure-html/unnamed-chunk-3-1.png) 
+
+```r
+barplot(table(bikeroutes.df$piece))
+```
+
+![](personal-data_files/figure-html/unnamed-chunk-3-2.png) 
+
+```r
+barplot(table(bikeroutes.df$group))
+```
+
+![](personal-data_files/figure-html/unnamed-chunk-3-3.png) 
+
+Group has 8192 levels, but there were originally 7712 lines. How do we know which
+ride is which? The group has a strange system, where the numbers are zero-indexed
+and the decimal place corresponds to the piece. So to get an ID we can just 
+
+
+```r
+bikeroutes.df$group %>% as.character() %>% as.numeric() %>% ceiling() %>% summary()
+```
+
+```
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##       1    1435    3138    3386    5220    7712
+```
+
+```r
+bikeroutes.df$id <-
+  bikeroutes.df$group %>% as.character() %>% as.numeric() %>% ceiling()
+```
+
+Really we need two dataframes: one for all the points that make up the paths
+and one just with an observation for each route.
+
+
+```r
+rides <- bikeroutes.shapefile@data %>%
+  select(rating,
+         rating_text,
+         owner__pk,
+         original_trip_length,
+         created,
+         pk,
+         rr_transformation)
+```
+
+Okay, but now we have another weird issue.
+
+
+```r
+head(rides)
+```
+
+```
+##   rating rating_text                            owner__pk
+## 0      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
+## 1      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
+## 2      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
+## 3      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
+## 4      1        good 2b16837b-7bd0-46f8-a208-829735957413
+## 5      1        good 2b16837b-7bd0-46f8-a208-829735957413
+##   original_trip_length                  created
+## 0            2507.7034 2015-09-19 00:31:20+0000
+## 1            2507.7034 2015-09-19 00:31:20+0000
+## 2            2507.7034 2015-09-19 00:31:20+0000
+## 3            2507.7034 2015-09-19 00:31:20+0000
+## 4             226.8222 2015-09-30 18:59:37+0000
+## 5             226.8222 2015-09-30 18:59:37+0000
+##                                     pk rr_transformation
+## 0 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a          simplify
+## 1 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a             match
+## 2 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a          simplify
+## 3 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a             match
+## 4 a376ecb5-7a23-44bb-b63e-1ae085515ec8          simplify
+## 5 a376ecb5-7a23-44bb-b63e-1ae085515ec8             match
+```
+
+```r
+head(bikeroutes.df %>% filter(order == 1))
+```
+
+```
+##        long      lat order piece group id
+## 1 -122.6532 45.50247     1     1   0.1  1
+## 2 -122.6532 45.50248     1     1   1.1  2
+## 3 -122.6532 45.50247     1     1   2.1  3
+## 4 -122.6532 45.50248     1     1   3.1  4
+## 5 -122.6498 45.51493     1     1   4.1  5
+## 6 -122.6496 45.51493     1     1   5.1  6
+```
+
+It seems like we have less data than we thought. It seems that there are four
+observations of every ride. One variable `rr_transformation` seems to explain
+on dimension of this duplication. This does explain why there are only 1928
+primary keys and 7712 observations:
+$$1928 \times 4 = 7712.$$
+
 This seems to include locations outside of Portland, OR. So let's filter this data.
 
 
@@ -50,9 +159,10 @@ bikeroutes.df <- bikeroutes.df %>%
   filter(lat > 45.462 & lat < 45.549) %>%
   filter(long < -122.577 & long > -122.722)
 
-ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path()
+ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path() +
+  coord_map(projection = "mercator")
 ```
 
-![](personal-data_files/figure-html/unnamed-chunk-3-1.png) 
+![](personal-data_files/figure-html/unnamed-chunk-7-1.png) 
 
 That's quite a bit of coverage for only five people!

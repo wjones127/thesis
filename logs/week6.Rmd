@@ -1,0 +1,22 @@
+---
+title: "Thesis Week 6"
+author: "Will Jones"
+date: "October 29, 2015"
+output: html_document
+---
+
+
+So far I have loaded the personal data and created a couple of maps. I am still
+working on those functions to really work with assigning streets and creating a
+basic model.
+
+Side note: One of the barriers to making these notes on time is that I spend
+most of Wednesday nights working on *The Quest*, and thus most work I put off
+for Wednesday ends up not getting done. 
+
+# TO DO
+
+- Finish up the data frames
+- Email RIDE report about alternate method for anon data, and clarify information
+- Create funtion to filter rides based on 
+- Implement naive segment matching

@@ -22,10 +22,58 @@ bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGe
 
 bikeroutes.df <- fortify(bikeroutes.shapefile)
 
+# bikeroutes.df <- bikeroutes.df %>%
+#   left_join(bikeroutes.shapefile@data, by="pk")
+
 head(bikeroutes.df)
 
 ggplot(bikeroutes.df, aes(x=long, y=lat, group=group)) + geom_path()
 ```
+
+Okay. The data produced by fortifying the bikeroutes dataframe is rather strange.
+
+```{r}
+barplot(table(bikeroutes.df$order))
+barplot(table(bikeroutes.df$piece))
+barplot(table(bikeroutes.df$group))
+```
+
+Group has 8192 levels, but there were originally 7712 lines. How do we know which
+ride is which? The group has a strange system, where the numbers are zero-indexed
+and the decimal place corresponds to the piece. So to get an ID we can just 
+
+```{r}
+bikeroutes.df$group %>% as.character() %>% as.numeric() %>% ceiling() %>% summary()
+bikeroutes.df$id <-
+  bikeroutes.df$group %>% as.character() %>% as.numeric() %>% ceiling()
+```
+
+Really we need two dataframes: one for all the points that make up the paths
+and one just with an observation for each route.
+
+```{r}
+rides <- bikeroutes.shapefile@data %>%
+  select(rating,
+         rating_text,
+         owner__pk,
+         original_trip_length,
+         created,
+         pk,
+         rr_transformation)
+```
+
+Okay, but now we have another weird issue.
+
+```{r}
+head(rides)
+head(bikeroutes.df %>% filter(order == 1))
+```
+
+It seems like we have less data than we thought. It seems that there are four
+observations of every ride. One variable `rr_transformation` seems to explain
+on dimension of this duplication. This does explain why there are only 1928
+primary keys and 7712 observations:
+$$1928 \times 4 = 7712.$$
 
 This seems to include locations outside of Portland, OR. So let's filter this data.
 
@@ -35,7 +83,8 @@ bikeroutes.df <- bikeroutes.df %>%
   filter(lat > 45.462 & lat < 45.549) %>%
   filter(long < -122.577 & long > -122.722)
 
-ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path()
+ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path() +
+  coord_map(projection = "mercator")
 ```
 
 That's quite a bit of coverage for only five people!
