@@ -96,7 +96,8 @@ rides <- bikeroutes.shapefile@data %>%
          original_trip_length,
          created,
          pk,
-         rr_transformation)
+         rr_transformation) %>%
+  tbl_df()
 ```
 
 Okay, but now we have another weird issue.
@@ -107,27 +108,18 @@ head(rides)
 ```
 
 ```
+## Source: local data frame [6 x 7]
+## 
 ##   rating rating_text                            owner__pk
-## 0      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
+##    (int)      (fctr)                               (fctr)
 ## 1      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
 ## 2      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
 ## 3      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
-## 4      1        good 2b16837b-7bd0-46f8-a208-829735957413
+## 4      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
 ## 5      1        good 2b16837b-7bd0-46f8-a208-829735957413
-##   original_trip_length                  created
-## 0            2507.7034 2015-09-19 00:31:20+0000
-## 1            2507.7034 2015-09-19 00:31:20+0000
-## 2            2507.7034 2015-09-19 00:31:20+0000
-## 3            2507.7034 2015-09-19 00:31:20+0000
-## 4             226.8222 2015-09-30 18:59:37+0000
-## 5             226.8222 2015-09-30 18:59:37+0000
-##                                     pk rr_transformation
-## 0 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a          simplify
-## 1 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a             match
-## 2 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a          simplify
-## 3 17f0cec2-0b4f-4b75-8e48-8092bcaddb0a             match
-## 4 a376ecb5-7a23-44bb-b63e-1ae085515ec8          simplify
-## 5 a376ecb5-7a23-44bb-b63e-1ae085515ec8             match
+## 6      1        good 2b16837b-7bd0-46f8-a208-829735957413
+## Variables not shown: original_trip_length (dbl), created (fctr), pk
+##   (fctr), rr_transformation (fctr)
 ```
 
 ```r
@@ -150,19 +142,38 @@ on dimension of this duplication. This does explain why there are only 1928
 primary keys and 7712 observations:
 $$1928 \times 4 = 7712.$$
 
+
+```r
+rides <- rides %>%
+  mutate(id = 1 + as.numeric(rownames(rides))) %>%
+  distinct(pk)
+
+rides.final <- bikeroutes.df %>%
+  inner_join(rides, by="id")
+```
+
+
 This seems to include locations outside of Portland, OR. So let's filter this data.
 
 
 ```r
-# TODO: filter by rides/groups/lines, not individual points
-bikeroutes.df <- bikeroutes.df %>%
-  filter(lat > 45.462 & lat < 45.549) %>%
-  filter(long < -122.577 & long > -122.722)
+not.in.portland <- rides.final %>%
+  filter(lat < 45.462 | lat > 45.549 | long > -122.577 | long < -122.722) %>%
+  distinct(pk) %>%
+  .$pk
 
-ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path() +
-  coord_map(projection = "mercator")
+rides.final %>%
+  filter(!pk %in% not.in.portland) %>%
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_path(alpha=0.3, aes(col=rating), lineend = "butt") +
+  coord_map(projection = "mercator") + 
+  scale_color_gradient2(low = "yellow", mid = "green", high = "red")
 ```
 
-![](personal-data_files/figure-html/unnamed-chunk-7-1.png) 
+```
+## Warning: Non Lab interpolation is deprecated
+```
+
+![](personal-data_files/figure-html/unnamed-chunk-8-1.png) 
 
 That's quite a bit of coverage for only five people!

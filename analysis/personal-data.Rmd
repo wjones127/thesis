@@ -59,7 +59,8 @@ rides <- bikeroutes.shapefile@data %>%
          original_trip_length,
          created,
          pk,
-         rr_transformation)
+         rr_transformation) %>%
+  tbl_df()
 ```
 
 Okay, but now we have another weird issue.
@@ -75,16 +76,30 @@ on dimension of this duplication. This does explain why there are only 1928
 primary keys and 7712 observations:
 $$1928 \times 4 = 7712.$$
 
+```{r}
+rides <- rides %>%
+  mutate(id = 1 + as.numeric(rownames(rides))) %>%
+  distinct(pk)
+
+rides.final <- bikeroutes.df %>%
+  inner_join(rides, by="id")
+```
+
+
 This seems to include locations outside of Portland, OR. So let's filter this data.
 
 ```{r}
-# TODO: filter by rides/groups/lines, not individual points
-bikeroutes.df <- bikeroutes.df %>%
-  filter(lat > 45.462 & lat < 45.549) %>%
-  filter(long < -122.577 & long > -122.722)
+not.in.portland <- rides.final %>%
+  filter(lat < 45.462 | lat > 45.549 | long > -122.577 | long < -122.722) %>%
+  distinct(pk) %>%
+  .$pk
 
-ggplot(bikeroutes.df, aes(x = long, y = lat, group = group)) + geom_path() +
-  coord_map(projection = "mercator")
+rides.final %>%
+  filter(!pk %in% not.in.portland) %>%
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_path(alpha=0.3, aes(col=rating), lineend = "butt") +
+  coord_map(projection = "mercator") + 
+  scale_color_gradient2(low = "yellow", mid = "green", high = "red")
 ```
 
 That's quite a bit of coverage for only five people!
