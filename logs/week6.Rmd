@@ -19,4 +19,4 @@ for Wednesday ends up not getting done.
 - Finish up the data frames
 - Email RIDE report about alternate method for anon data, and clarify information
 - Create funtion to filter rides based on 
-- Implement naive segment matching
+- Implement naive segment matching / averaging
