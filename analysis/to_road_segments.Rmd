@@ -1,0 +1,63 @@
+---
+title: "Getting to Road Segments"
+author: "Will Jones"
+date: "November 14, 2015"
+output: html_document
+---
+```{r, echo=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(rgdal))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+```
+
+
+```{r, cache=TRUE}
+load("../data/rides.RData")
+load("../data/bikeroutes.RData")
+```
+
+You can also embed plots, for example:
+
+```{r, cache=TRUE}
+ogrInfo(dsn="../data/PortlandBicycleNetwork", layer="Bicycle_Network_pdx")
+PDX.bike.network <- readOGR(dsn="../data/PortlandBicycleNetwork", layer="Bicycle_Network_pdx")
+```
+
+```{r}
+
+PDX.bike.network <- spTransform(PDX.bike.network, CRS("+proj=longlat +ellps=WGS84 +datum=WGS84"))
+PDX.bike.network.df <- fortify(PDX.bike.network)
+
+ggplot(PDX.bike.network.df, aes(x=long, y=lat, group=group)) + geom_path()
+```
+
+First problem: the coordinates are not compatible:
+```{r}
+head(bikeroutes.df)
+head(PDX.bike.network.df)
+```
+
+In the end, we want a dataframe with the variables:
+
+- Ride ID
+- Rider ID
+- Ride Rating
+- Trip Length
+- Segment ID
+- Segment Length
+- Segment Type (Facility)
+
+```{r}
+PDX.bike.network.df <- PDX.bike.network@data %>%
+  select(OBJECTID, FACILITY, LENGTHMILE) %>%
+  transmute(id = as.character(OBJECTID), type = FACILITY, length = LENGTHMILE) %>%
+  right_join(PDX.bike.network.df, by=c("id"="id"))
+```
+
+
+How do we merge them? No idea. Let's just try...
+
+```{r}
+bikeroutes2 <- left_join(bikeroutes.df, PDX.bike.network.df, by=c('long', 'lat'))
+```
+
