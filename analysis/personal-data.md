@@ -97,6 +97,9 @@ rides <- bikeroutes.shapefile@data %>%
          created,
          pk,
          rr_transformation) %>%
+  # No need to have the actual primary keys here. Not good for security anyways.
+  mutate(owner__pk = as.numeric(owner__pk),
+         pk = as.numeric(pk)) %>%
   tbl_df()
 ```
 
@@ -110,16 +113,15 @@ head(rides)
 ```
 ## Source: local data frame [6 x 7]
 ## 
-##   rating rating_text                            owner__pk
-##    (int)      (fctr)                               (fctr)
-## 1      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
-## 2      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
-## 3      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
-## 4      1        good 03a89822-6c9f-4d49-a4fc-68849e8c25b5
-## 5      1        good 2b16837b-7bd0-46f8-a208-829735957413
-## 6      1        good 2b16837b-7bd0-46f8-a208-829735957413
-## Variables not shown: original_trip_length (dbl), created (fctr), pk
-##   (fctr), rr_transformation (fctr)
+##   rating rating_text owner__pk original_trip_length
+##    (int)      (fctr)     (dbl)                (dbl)
+## 1      1        good         1            2507.7034
+## 2      1        good         1            2507.7034
+## 3      1        good         1            2507.7034
+## 4      1        good         1            2507.7034
+## 5      1        good         2             226.8222
+## 6      1        good         2             226.8222
+## Variables not shown: created (fctr), pk (dbl), rr_transformation (fctr)
 ```
 
 ```r
@@ -177,3 +179,16 @@ rides.final %>%
 ![](personal-data_files/figure-html/unnamed-chunk-8-1.png) 
 
 That's quite a bit of coverage for only five people!
+
+How do they seem to rate their rides?
+
+
+```r
+rides %>% group_by(owner__pk) %>%
+  ggplot(aes(x = rating_text)) + 
+  geom_histogram() + 
+  facet_grid(~owner__pk)
+```
+
+![](personal-data_files/figure-html/unnamed-chunk-9-1.png) 
+

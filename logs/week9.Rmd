@@ -1,0 +1,30 @@
+---
+title: "Week 9"
+author: "Will Jones"
+date: "November 12, 2015"
+output: html_document
+---
+
+So I have a month to get an outline of my thesis ready. I will really need to
+prioritize my thesis, which I have failed to do thus far.
+
+Here I am using Tuesdays (mostly) as deadlines, so I have milestones done for Thursdays. On Wednesdays I have very little time to work on thesis, because I am usually devoting most of the day to _The Quest_ (newspaper).
+
+I'm going to need to scale back my work on other projects in the mean time. For _The Quest_, I will refrain from doing any writing or interviews. I will limit my webmaster work to Thursday and Sunday afternoons.
+
+I have blocked out time on weekends for thesis work, as well as on Tuesdays
+and Thursdays, my most free days.
+
+Here is a rough schedule of milestone deadlines for the next month:
+
+Nov. 17: Finish code for road segment dataframe. (Basically, have preparation for
+modeling).
+
+Nov. 25: Explore and map the data frame. Bring in other useful data sets, such
+as weather, traffic, and infrastructure data.
+
+Dec. 1: Get data together and documented. Start modeling and evaluating modeling.
+
+Dec. 8: Get a model working. Write an introduction.
+
+Dec 15: Thesis table of contents, bibliography, introduction and data and data docs done.

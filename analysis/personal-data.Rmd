@@ -22,9 +22,6 @@ bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGe
 
 bikeroutes.df <- fortify(bikeroutes.shapefile)
 
-# bikeroutes.df <- bikeroutes.df %>%
-#   left_join(bikeroutes.shapefile@data, by="pk")
-
 head(bikeroutes.df)
 
 ggplot(bikeroutes.df, aes(x=long, y=lat, group=group)) + geom_path()
@@ -60,6 +57,9 @@ rides <- bikeroutes.shapefile@data %>%
          created,
          pk,
          rr_transformation) %>%
+  # No need to have the actual primary keys here. Not good for security anyways.
+  mutate(owner__pk = as.numeric(owner__pk),
+         pk = as.numeric(pk)) %>%
   tbl_df()
 ```
 
@@ -103,3 +103,21 @@ rides.final %>%
 ```
 
 That's quite a bit of coverage for only five people!
+
+How do they seem to rate their rides?
+
+```{r}
+rides %>% 
+  ggplot(aes(x = rating_text)) + 
+  geom_histogram() + 
+  facet_grid(~owner__pk)
+```
+
+
+Alright let's save this data for now.
+
+```{r}
+save(bikeroutes.df, file = "../data/bikeroutes.RData")
+save(rides, file = "../data/rides.RData")
+```
+

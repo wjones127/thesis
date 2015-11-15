@@ -15,3 +15,9 @@ each ride in the data. It seems to be split so that two rides have the variable
 I will ask William about this, but wow this totally solved the how many 
 observations mystery. I guess this is why exploratory data analysis is such a big
 deal.
+
+
+TO DO:
+- Get response from William about data
+- Create shapefile of street segments
+- Subset data
