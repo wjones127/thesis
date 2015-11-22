@@ -6,8 +6,10 @@ output: html_document
 ---
 ```{r, echo=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(rgdal))
+suppressPackageStartupMessages(library(rgeos))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(Hmisc))
 ```
 
 
@@ -23,7 +25,7 @@ ogrInfo(dsn="../data/PortlandBicycleNetwork", layer="Bicycle_Network_pdx")
 PDX.bike.network <- readOGR(dsn="../data/PortlandBicycleNetwork", layer="Bicycle_Network_pdx")
 ```
 
-```{r}
+```{r, cache=TRUE}
 
 PDX.bike.network <- spTransform(PDX.bike.network, CRS("+proj=longlat +ellps=WGS84 +datum=WGS84"))
 PDX.bike.network.df <- fortify(PDX.bike.network)
@@ -33,7 +35,7 @@ ggplot(PDX.bike.network.df, aes(x=long, y=lat, group=group)) + geom_path()
 
 First problem: the coordinates are not compatible:
 ```{r}
-head(bikeroutes.df)
+head(rides.final)
 head(PDX.bike.network.df)
 ```
 
@@ -55,9 +57,70 @@ PDX.bike.network.df <- PDX.bike.network@data %>%
 ```
 
 
-How do we merge them? No idea. Let's just try...
+How do we merge them? No idea. Let's just try for each of the points in the rides
+the closest point in the bike network, and then mapping each ride point to the 
+segment that it's corresponding network point belongs to. Simple, slow, and probably
+very wrong. Oh well...
 
 ```{r}
-bikeroutes2 <- left_join(bikeroutes.df, PDX.bike.network.df, by=c('long', 'lat'))
+# THIS IS SO SLOW!
+# Subset data to test
+# bikeroutes.df <- bikeroutes.df[1:100,]
+
+#closest.in.vector <- function(u, v) {
+#  function(x) {
+#  which.min(sqrt((u - x[1])^2 + (v - x[2])^2))
+#  }
+#}
+#closest.in.network <- closest.in.vector(PDX.bike.network.df$long,
+#                                        PDX.bike.network.df$lat)
+#bikeroutes.df$closest <- bikeroutes.df %>%
+#  select(long, lat) %>%
+#  apply(1, closest.in.network)
 ```
 
+This function is way too slow!
+
+New theory: the segments are already in the data, I just need to find them.
+
+```{r}
+route.segments <- rides.final %>%
+  rename(long.start = long, lat.start = lat) %>%
+  mutate(long.end = Lag(long.start, shift = -1),
+         lat.end = Lag(lat.start, shift = - 1),
+         order.shifted = Lag(order, shift = -1)) %>%
+  filter(order.shifted != 1 & !is.na(order.shifted) ) %>%
+  select(long.start, lat.start, long.end, lat.end, id, order, piece)
+  
+segments <- route.segments %>%  
+  select(long.start, lat.start, long.end, lat.end) %>%
+  group_by(long.start, lat.start, long.end, lat.end) %>%
+  summarise(count = n()) %>%
+  tbl_df()
+
+summary(segments$count)
+
+qplot(data = segments, x = count, xlim = c(0, 25))
+```
+There seems to be very few segments that are actually common between the
+different rides, which is rather troubling.
+```{r}
+segments %>%
+  ggplot(aes(x = long.start, y = lat.start,
+             xend = long.end, yend = lat.end)) +
+  geom_segment() + 
+  coord_map(projection = "mercator") + 
+  xlim(-122.68, -122.64) +
+  ylim(45.5, 45.525) +
+  ggtitle("All of the road segments")
+
+segments %>%
+  filter(count > 1) %>%
+  ggplot(aes(x = long.start, y = lat.start,
+             xend = long.end, yend = lat.end)) +
+  geom_segment() + 
+  coord_map(projection = "mercator") + 
+  xlim(-122.68, -122.64) +
+  ylim(45.5, 45.525) +
+  ggtitle("Road segments that have multiple occurences.")
+```

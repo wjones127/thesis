@@ -22,9 +22,6 @@ bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGe
 ```r
 bikeroutes.df <- fortify(bikeroutes.shapefile)
 
-# bikeroutes.df <- bikeroutes.df %>%
-#   left_join(bikeroutes.shapefile@data, by="pk")
-
 head(bikeroutes.df)
 ```
 
@@ -146,12 +143,34 @@ $$1928 \times 4 = 7712.$$
 
 
 ```r
-rides <- rides %>%
-  mutate(id = 1 + as.numeric(rownames(rides))) %>%
-  distinct(pk)
+# Add id to rides dataframe
+rides$id <- 1:nrow(rides)
 
+# Give a number to each of copies
+rides$version <- as.factor(rep(c(1,2,3,4), 1928))
+
+# Join over to paths
 rides.final <- bikeroutes.df %>%
   inner_join(rides, by="id")
+
+# Plot the different versions
+rides.final %>%
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_path(alpha=0.3, lineend = "butt") +
+  coord_map(projection = "mercator",
+            ylim = c(45.5, 45.525),
+            xlim = c(-122.68, -122.64)) + 
+  facet_wrap(~ version)
+```
+
+![](personal-data_files/figure-html/unnamed-chunk-7-1.png) 
+
+Okay, so the version I actually want are the 'simplify' versions. Let's select
+version 2.
+
+
+```r
+rides.final <- rides.final %>% filter(version == "2")
 ```
 
 
@@ -176,7 +195,7 @@ rides.final %>%
 ## Warning: Non Lab interpolation is deprecated
 ```
 
-![](personal-data_files/figure-html/unnamed-chunk-8-1.png) 
+![](personal-data_files/figure-html/unnamed-chunk-9-1.png) 
 
 That's quite a bit of coverage for only five people!
 
@@ -184,11 +203,20 @@ How do they seem to rate their rides?
 
 
 ```r
-rides %>% group_by(owner__pk) %>%
+rides %>% 
   ggplot(aes(x = rating_text)) + 
   geom_histogram() + 
   facet_grid(~owner__pk)
 ```
 
-![](personal-data_files/figure-html/unnamed-chunk-9-1.png) 
+![](personal-data_files/figure-html/unnamed-chunk-10-1.png) 
+
+
+Alright let's save this data for now.
+
+
+```r
+save(rides.final, file = "../data/bikeroutes.RData")
+save(rides, file = "../data/rides.RData")
+```
 
