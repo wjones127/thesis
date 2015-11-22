@@ -17,7 +17,7 @@ version were the ones I wanted, but I was wrong.
 I went back to look at the difference between those two sets, and look what I
 found:
 
-![Plot of the four different data sets, zoomed in at a portion of the city. ](../analysis/personal-data_files/unnamed-chunk-7-1.png)
+![Plot of the four different data sets, zoomed in at a portion of the city. ](https://raw.githubusercontent.com/wjones127/thesis/master/analysis/personal-data_files/figure-html/unnamed-chunk-7-1.png)
 
 Here, it's clear that plots 1 and 3, which are 'match' data, are not cleanly 
 matched to streets, while plots 2 and 4, which are the 'simplify' data, are.
