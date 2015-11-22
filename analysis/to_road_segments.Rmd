@@ -98,6 +98,8 @@ segments <- route.segments %>%
   summarise(count = n()) %>%
   tbl_df()
 
+```
+
 summary(segments$count)
 
 qplot(data = segments, x = count, xlim = c(0, 25))
@@ -124,3 +126,26 @@ segments %>%
   ylim(45.5, 45.525) +
   ggtitle("Road segments that have multiple occurences.")
 ```
+
+Okay, cool. Now let's compare this to the road network.
+
+```{r}
+segments %>%
+  ggplot() +
+  geom_segment(aes(x = long.start, y = lat.start,
+             xend = long.end, yend = lat.end,
+             colour = "Ride Paths")) + 
+  # Add in the bike network
+  geom_path(data = PDX.bike.network.df, aes(x = long, y = lat, group = group,
+  colour = "Bicycle Network")) +
+  coord_map(projection = "mercator",
+            xlim = c(-122.68, -122.64),
+            ylim = c(45.5, 45.525)) + 
+  ggtitle("Bicycle Network versus Ride Paths")
+```
+
+
+
+
+
+
