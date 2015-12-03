@@ -4,3 +4,5 @@
 .dropbox
 data/RIDE/william-trips-export.json
 */*_cache/
+library
+data
