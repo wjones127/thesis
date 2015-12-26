@@ -1,0 +1,33 @@
+---
+title: "Joining Road Data"
+author: "Will Jones"
+date: "November 28, 2015"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages(library(rgdal))
+suppressPackageStartupMessages(library(rgeos))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(Hmisc))
+suppressPackageStartupMessages(library(FNN))
+```
+
+
+
+```{r}
+load("../data/rides.RData")
+load("../data/route_segments.RData")
+load("../data/segments.RData")
+```
+
+```{r}
+segment.lat.long <- cbind(route.segments$lat.start,
+                          route.segments$long.start)
+
+example <- cbind(45.55, -122.99)
+
+result<- knnx.index(segment.lat.long, example, k=1)
+```
+

@@ -1,0 +1,83 @@
+---
+title: "First Model"
+author: "Will Jones"
+date: "December 8, 2015"
+output: html_document
+---
+
+```{r, echo=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(rgdal))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(lubridate))
+suppressPackageStartupMessages(library(lme4))
+```
+
+Couldn't find hourly weather yet, but I did find daily weather. We actually
+could simply consider weather to be a random effect: as in the weather during
+the ride is randomly picked from a distribution determined by weather parameters
+like maximum and minimum temperature and percipitation.
+
+```{r}
+bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGeoJSON", p4s="+proj=tmerc +ellps=WGS84")
+
+rides <- bikeroutes.shapefile@data %>%
+  select(rating,
+         rating_text,
+         owner__pk,
+         original_trip_length,
+         created,
+         pk,
+         rr_transformation) %>%
+  # No need to have the actual primary keys here. Not good for security anyways.
+  mutate(owner__pk = as.numeric(owner__pk),
+         pk = as.numeric(pk),
+         id = 1:nrow(bikeroutes.shapefile@data)) %>%
+  tbl_df() %>% 
+  # Only consider simplified versions
+  filter(rr_transformation == "simplify")
+```
+
+Next, filter down to (a section of) Portland, OR.
+
+```{r}
+bikeroutes.df <- fortify(bikeroutes.shapefile) %>%
+  mutate(id = group %>% as.character() %>% as.numeric() %>% ceiling())
+  
+not.in.portland <- bikeroutes.df %>%
+  filter(lat < 45.462 | lat > 45.549 | long > -122.577 | long < -122.722) %>%
+  .id
+
+rides <- rides %>%
+  filter(!id %in% not.in.portland)
+```
+
+Now merge in weather data.
+
+```{r}
+weather <- read.csv("../data/weather.csv")
+
+rides <- rides %>%
+  left_join(weather, by=('date' = 'date'))
+```
+
+Add traffic indicator. For now we will just consider there to be rush hour if
+the ride took place between the hours of 7:00am - 9:00am or 4:00pm - 7:00pm.
+
+```{r}
+during.rush.hour <- function(dates) {
+  6 < hour(dates) < 9 | 15 < hour(dates) < 19
+}
+
+rides$rush.hour <- rides$date %>%
+  during.rush.hour() 
+```
+
+
+Now let's fit a model
+```{r}
+model <- lmer(rating ~ (rider) + length + rush.hour + raining + temperature)
+```
+
+
+How do we treat non-response?

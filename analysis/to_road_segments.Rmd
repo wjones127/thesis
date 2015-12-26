@@ -18,26 +18,6 @@ load("../data/rides.RData")
 load("../data/bikeroutes.RData")
 ```
 
-You can also embed plots, for example:
-
-```{r, cache=TRUE}
-ogrInfo(dsn="../data/PortlandBicycleNetwork", layer="Bicycle_Network_pdx")
-PDX.bike.network <- readOGR(dsn="../data/PortlandBicycleNetwork", layer="Bicycle_Network_pdx")
-```
-
-```{r, cache=TRUE}
-
-PDX.bike.network <- spTransform(PDX.bike.network, CRS("+proj=longlat +ellps=WGS84 +datum=WGS84"))
-PDX.bike.network.df <- fortify(PDX.bike.network)
-
-ggplot(PDX.bike.network.df, aes(x=long, y=lat, group=group)) + geom_path()
-```
-
-First problem: the coordinates are not compatible:
-```{r}
-head(rides.final)
-head(PDX.bike.network.df)
-```
 
 In the end, we want a dataframe with the variables:
 
@@ -48,38 +28,6 @@ In the end, we want a dataframe with the variables:
 - Segment ID
 - Segment Length
 - Segment Type (Facility)
-
-```{r}
-PDX.bike.network.df <- PDX.bike.network@data %>%
-  select(OBJECTID, FACILITY, LENGTHMILE) %>%
-  transmute(id = as.character(OBJECTID), type = FACILITY, length = LENGTHMILE) %>%
-  right_join(PDX.bike.network.df, by=c("id"="id"))
-```
-
-
-How do we merge them? No idea. Let's just try for each of the points in the rides
-the closest point in the bike network, and then mapping each ride point to the 
-segment that it's corresponding network point belongs to. Simple, slow, and probably
-very wrong. Oh well...
-
-```{r}
-# THIS IS SO SLOW!
-# Subset data to test
-# bikeroutes.df <- bikeroutes.df[1:100,]
-
-#closest.in.vector <- function(u, v) {
-#  function(x) {
-#  which.min(sqrt((u - x[1])^2 + (v - x[2])^2))
-#  }
-#}
-#closest.in.network <- closest.in.vector(PDX.bike.network.df$long,
-#                                        PDX.bike.network.df$lat)
-#bikeroutes.df$closest <- bikeroutes.df %>%
-#  select(long, lat) %>%
-#  apply(1, closest.in.network)
-```
-
-This function is way too slow!
 
 New theory: the segments are already in the data, I just need to find them.
 
@@ -100,10 +48,7 @@ segments <- route.segments %>%
 
 ```
 
-summary(segments$count)
 
-qplot(data = segments, x = count, xlim = c(0, 25))
-```
 There seems to be very few segments that are actually common between the
 different rides, which is rather troubling.
 ```{r}
@@ -127,23 +72,14 @@ segments %>%
   ggtitle("Road segments that have multiple occurences.")
 ```
 
-Okay, cool. Now let's compare this to the road network.
+Now let's save the segments.
 
 ```{r}
-segments %>%
-  ggplot() +
-  geom_segment(aes(x = long.start, y = lat.start,
-             xend = long.end, yend = lat.end,
-             colour = "Ride Paths")) + 
-  # Add in the bike network
-  geom_path(data = PDX.bike.network.df, aes(x = long, y = lat, group = group,
-  colour = "Bicycle Network")) +
-  coord_map(projection = "mercator",
-            xlim = c(-122.68, -122.64),
-            ylim = c(45.5, 45.525)) + 
-  ggtitle("Bicycle Network versus Ride Paths")
-```
 
+save(route.segments, file="../data/route_segments.RData")
+save(segments, file="../data/segments.RData")
+
+```
 
 
 
