@@ -1,34 +1,36 @@
 ---
 output: pdf_document
 header-includes:
+- \usepackage{graphicx,latexsym}
 - \usepackage{amssymb,amsthm,amsmath}
-- \usepackage{chemarr}
+- \usepackage{longtable,booktabs,setspace}
 ---
 
 <!--
 You can delete the header-includes (lines 3-6 above) if you like and also the chunk below since it is loaded in the skeleton.Rmd file.  They are included so that chap3.Rmd will compile by itself when you hit Knit PDF.
 -->
 
-```{r include_rticles_2, include = FALSE}
+```{r include_rticles_5, include = FALSE}
 # This chunk ensures that the rticles package is installed and loaded
 # This rticles package includes the template files for the thesis and also
 # two functions used for labeling and referencing
 if(!require(devtools))
   install.packages("devtools", repos = "http://cran.rstudio.com")
-
+if(!require(dplyr))
+    install.packages("dplyr", repos = "http://cran.rstudio.com")
+if(!require(ggplot2))
+    install.packages("ggplot2", repos = "http://cran.rstudio.com")
 if(!require(rticles)){
   library(devtools)
   devtools::install_github("ismayc/rticles")
   }
 library(rticles)
+flights <- read.csv("flights.csv")
 ```
 
 
-# Data Transformation {#data-trans}
+# Model 2: Segments as a New Level
 
-## Working in Road Networks
+## Choosing Segment-Level Parameters
 
-
-## Using Nearest Neighbor Search for Map Matching Data
-
-
+## Evaluating Segment-Level Models
