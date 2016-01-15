@@ -1,10 +1,16 @@
 # Hierarchical Models for Crowdsourced Bicycle Route Ratings
 This is my undergraduate thesis, currently in progress and to be completed May
-of 2016. 
+of 2016.
 
-In this thesis, I examine a dataset of crowdsourced ratings of urban bicycle
-rides, and attempt to create a model that predicts ride ratings from ride
-and route level variables. 
+The [Ride Report App](ride.report) automatically saves GPS traces of users'
+bicycle rides and prompts them at the end of their ride for a rating ("Stressful"
+or "Chill".) From this, they have created a [stress map](ride.report/map) of
+Portland, OR, with color indicated average rating of road segments (and width 
+indicating segment popularity.)
+
+This thesis seeks to improve upon this map. I use a multilevel regression model
+for predicting ride rating based on route and road conditions, with rider-specific
+random effects to account for between and within rider variability in ratings.
 
 ## File Structure
 This repository is an R package with several bonus folders. They are:
