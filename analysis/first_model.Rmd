@@ -8,9 +8,14 @@ output: html_document
 ```{r, echo=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(rgdal))
 suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggthemes))
 suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(lubridate))
 suppressPackageStartupMessages(library(lme4))
+suppressPackageStartupMessages(library(arm))
+suppressPackageStartupMessages(library(caret))
+suppressPackageStartupMessages(library(rstanarm))
 ```
 
 Couldn't find hourly weather yet, but I did find daily weather. We actually
@@ -19,46 +24,22 @@ the ride is randomly picked from a distribution determined by weather parameters
 like maximum and minimum temperature and percipitation.
 
 ```{r}
-bikeroutes.shapefile <- readOGR("../data/RIDE/william-trips-export.json", "OGRGeoJSON", p4s="+proj=tmerc +ellps=WGS84")
+load('../data/rides.RData')
+load('../data/weather_daily.RData')
+load('../data/rain_hourly.RData')
 
-rides <- bikeroutes.shapefile@data %>%
-  select(rating,
-         rating_text,
-         owner__pk,
-         original_trip_length,
-         created,
-         pk,
-         rr_transformation) %>%
-  # No need to have the actual primary keys here. Not good for security anyways.
-  mutate(owner__pk = as.numeric(owner__pk),
-         pk = as.numeric(pk),
-         id = 1:nrow(bikeroutes.shapefile@data)) %>%
-  tbl_df() %>% 
-  # Only consider simplified versions
-  filter(rr_transformation == "simplify")
-```
-
-Next, filter down to (a section of) Portland, OR.
-
-```{r}
-bikeroutes.df <- fortify(bikeroutes.shapefile) %>%
-  mutate(id = group %>% as.character() %>% as.numeric() %>% ceiling())
-  
-not.in.portland <- bikeroutes.df %>%
-  filter(lat < 45.462 | lat > 45.549 | long > -122.577 | long < -122.722) %>%
-  .id
-
-rides <- rides %>%
-  filter(!id %in% not.in.portland)
+summary(rides)
 ```
 
 Now merge in weather data.
 
 ```{r}
-weather <- read.csv("../data/weather.csv")
+rides.final <- rides %>%
+  mutate(date = floor_date(datetime, "day")) %>%
+  left_join(weather, by = "date") %>%
+  mutate(datetime = floor_date(datetime, "hour")) %>%
+  left_join(rain, by="datetime")
 
-rides <- rides %>%
-  left_join(weather, by=('date' = 'date'))
 ```
 
 Add traffic indicator. For now we will just consider there to be rush hour if
@@ -66,18 +47,176 @@ the ride took place between the hours of 7:00am - 9:00am or 4:00pm - 7:00pm.
 
 ```{r}
 during.rush.hour <- function(dates) {
-  6 < hour(dates) < 9 | 15 < hour(dates) < 19
+  (6 < hour(dates) & hour(dates) < 9) | (15 < hour(dates) & hour(dates) < 19)
 }
 
-rides$rush.hour <- rides$date %>%
+rides.final$rush.hour <- rides.final$datetime %>%
   during.rush.hour() 
+
+
 ```
 
+Some quick graphs:
 
-Now let's fit a model
 ```{r}
-model <- lmer(rating ~ (rider) + length + rush.hour + raining + temperature)
+ggplot(rides.final, aes(x = length, color = stressful)) + geom_density()
+
+ggplot(rides.final, aes(x = stressful, y = rain)) + geom_boxplot()
+
+#ggplot(rides.final, aes(x = stressful)) + geom_histogram() + 
+#  facet_wrap(~ rush.hour)
+
+rides.final %>%
+  group_by(rush.hour, stressful) %>%
+  summarise(total =  n())
+
+table(rides.final$rush.hour, rides.final$stressful, dnn=c("Rush Hour", "Stressful")) %>%
+  prop.table(margin=1)
+
+ggplot(rides.final, aes(x = rainfall.4h, color = stressful)) + geom_density()
 ```
 
+
+```{r}
+rides.scaled <- rides.final %>%
+  mutate(log.length = scale(log(length)),
+    length = scale(length)) %>%
+  filter(!is.na(stressful),
+         !is.na(max.temp),
+         !is.na(rain))
+
+# Compute rider average log.length
+rider.avg.lengths <- rides.scaled %>%
+  group_by(rider) %>%
+  summarise(avg.log.length = mean(log.length, na.rm=TRUE))
+
+rides.scaled <- rides.scaled %>%
+  left_join(rider.avg.lengths, by="rider")
+  
+
+inTraining <- createDataPartition(rides.scaled$id, p = .75, list = FALSE)
+
+training <- rides.scaled[inTraining,]
+testing <- rides.scaled[-inTraining,]
+```
+
+Let's use separation plots!
+
+```{r}
+separation.plot <- function(data, col.actual, col.probs) {
+  results <- data %>%
+    arrange_(col.probs) %>%
+    select_(col.actual, col.probs) %>%
+    rename_(Y = col.actual, Yhat = col.probs)
+  
+  ggplot(results) +
+    geom_rect(aes(xmin = 0, xmax = seq(length.out = length(Yhat)), ymin = 0, ymax = 1),
+              fill = "white") +
+    geom_linerange(aes(color = !Y, ymin = 0, ymax = 1, 
+                       x = seq(length.out = length(Yhat)))) + 
+    geom_line(aes(y = Yhat, x = seq(length.out = length(Yhat))), lwd = 0.8)  +
+    scale_y_continuous("Y-hat\n", breaks = c(0, 0.25, 0.5, 0.75, 1.0)) + 
+    scale_x_continuous("", breaks = NULL) +
+    theme_linedraw() + 
+    scale_colour_grey(end=1)
+}
+```
+
+
+## Intercept Baseline Model
+```{r}
+
+model0.0 <- glm(stressful ~ 1, data = training, family=binomial(link="logit"))
+
+p <- exp(coef(model0.0[1]))
+
+testing$prediction0.0 = predict.glm(model0.0, testing, type="response")
+
+separation.plot(testing, "stressful", "prediction0.0")
+
+```
+
+## Basic Model
+```{r}
+model0 <- glm(stressful ~ log.length + rush.hour + rainfall.4h + mean.wind.speed,
+               data = training, family=binomial(link="logit"))
+
+testing$prediction0 = predict.glm(model0, testing, type="response")
+
+separation.plot(testing, "stressful", "prediction0")
+
+# mean(testing$stressful != testing$prediction0)
+```
+
+
+## Model with Random Rider Effects
+```{r}
+model1 <- glmer(stressful ~ (1|rider) + log.length + rush.hour + rainfall.4h + mean.wind.speed,
+               data = training, family=binomial(link="logit"))
+
+testing$prediction1 = predict(model1, testing, type="response")
+
+#mean(testing$stressful != testing$prediction1)
+
+
+separation.plot(testing, "stressful", "prediction1")
+```
+
+There is some clear improvement in the separation when we add random effects
+from riders.
+
+Let's add in rider average log.length.
+
+```{r}
+model2 <- glmer(stressful ~ 1 + (1|rider) + avg.log.length + log.length + rush.hour + rainfall.4h + mean.wind.speed,
+               data = training, family=binomial(link="logit"))
+
+testing$prediction2 = predict(model2, testing, type="response")
+
+#mean(testing$stressful != testing$prediction1)
+
+
+separation.plot(testing, "stressful", "prediction2")
+
+coef(model2)
+```
+
+We aren't getting huge improvements from this model.
+
+
+```{r, echo=FALSE}
+#model2 <- stan_glmer(stressful ~ (1|rider) + log.length + rush.hour + rainfall.4h + mean.wind.speed,
+#                data = rides.scaled, family=binomial(link="logit"))
+
+#testing$prediction2 = ifelse(predict(model2, testing, type="response") >= 0.5, TRUE, FALSE)
+
+#mean(testing$stressful != testing$prediction2)
+
+```
+
+## More quick graphs: Interaction terms?
+
+```{r}
+
+ggplot(rides.scaled, aes(x = jitter(mean.temp), y = jitter(rainfall.4h), color = stressful)) +
+  geom_point()
+
+
+
+```
+
+```{r}
+model3 <- glmer(stressful ~ 1 + (1|rider),
+               data = training, family=binomial(link="logit"))
+
+testing$prediction3 = predict(model3, testing, type="response")
+
+#mean(testing$stressful != testing$prediction1)
+
+
+separation.plot(testing, "stressful", "prediction3")
+
+coef(model3)
+```
 
 How do we treat non-response?
