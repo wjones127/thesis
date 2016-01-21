@@ -31,6 +31,11 @@ flights <- read.csv("flights.csv")
 
 # Model 1: Rides and Riders
 
+We start out model simply and then building up. The first problem to approach is
+handling rider variance. This sections describes how we do that using a random
+effects terms and demonstrates the improvement in the models fit and predictive
+accuracy over more classical models.
+
 ## Choosing Ride-Level Parameters
 
 ## Adding Random Effects from Riders

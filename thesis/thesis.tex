@@ -51,7 +51,7 @@
 
 % \usepackage{times} % other fonts are available like times, bookman, charter, palatino
 
-\title{Multilevel Models for Crowdsourced Route Ratings}
+\title{Hierarchical Models for Crowdsourced Bicycle Route Ratings}
 \author{Will Jones}
 % The month and year that you submit your FINAL draft TO THE LIBRARY (May or December)
 \date{May 2016}
@@ -292,13 +292,160 @@ The preface pretty much says it all.
   \section{Using Nearest Neighbor Search for Map Matching
   Data}\label{using-nearest-neighbor-search-for-map-matching-data}
   
+  \section{Missing Data}\label{missing-data}
+  
   \chapter{Methods}\label{methods}
+  
+  As an undergraduate thesis, a lot of research into methodology was done.
+  Here I go through some of the essential methodology, while establishing
+  the notation I will use for the rest of this paper.
   
   \section{Logistic Regression}\label{logistic-regression}
   
-  \section{Multilevel Models}\label{multilevel-models}
+  With logistic regression, we seek to fit a model where the response
+  variable is binary. We might consider the response variable, \(Y\), a
+  Bernoulli random variable,
+  
+  \[Y = \text{Bernoulli}(p),\]
+  
+  where \(p\) is the probability that an observation \(y_i = 1,\) for any
+  \(i\). (As a binary variable, the support of \(Y\) is \(\{0,1\}\), so
+  \(y_i = 0\) otherwise.) Thus, in predicting and making inference about a
+  Bernoulli variable, we are concerned with \(p\) and how it varies with
+  respect to other quantities.
+  
+  Logistic regression is, as we will see, one form of regression
+  generalized from linear regression.
+  
+  Linear regression is the first form of regression most people learn:
+  find the line
+  
+  \[y_i = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon,\]
+  
+  based on data with response variable \(y_i\) and \(j\) predictor
+  variables \(x_i\), coefficients \(\beta_0, \ldots, \beta_j\), and error
+  term \(\epsilon \sim N(0, \sigma^2)\). We can equivalently write,
+  
+  \[Y \sim N(\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j, \sigma^2).\]
+  
+  Generalized linear regression uses a ``link function,'' \(g\), to modify
+  the regression:
+  
+  \[g(y_i) = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon.\]
+  
+  Logistic regression is a form of generalized regression where the `link'
+  function is the logit function, \(\text{logit}:[0,1] \to \mathbb{R}\):
+  
+  \[ \text{logit} (p) = \log \left(\frac{p}{1-p}\right), \]
+  
+  also known as the log-odds, odds being \(p/1-p\) for any probability
+  \(p\). So we can model this as a Bernoulli random variable where the
+  probability of a 1 is:
+  
+  \[\mathbb{P} (y_i = 1) = \text{logit}^{-1} (\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j).\]
+  
+  Notice that the inverse logit function maps values from \(\mathbb{R}\)
+  to \([0,1]\). The function provides a convenient way to map linear
+  combinations of other variables onto values that are valid
+  probabilities. Other such functions exist and are also used for
+  regression of binary variables, such as the probit function.
+  
+  \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-1-1} \end{center}
+  
+  \section{Hierarchical Models and Mixed Effects
+  Models}\label{hierarchical-models-and-mixed-effects-models}
+  
+  Many data sets contain nested structures when viewed in some way. For
+  example, a data set of student test scores may contain information about
+  the schools and districts they are in. Or a dataset of soil samples may
+  have multiple samples from each of a set of different sites. In the
+  dataset we examine, rides can be grouped by rider.
+  
+  Mutlilevel models allow us to address these kinds of relationships in
+  regression models. They provide a number of computational advantages, as
+  we shall describe later.
+  
+  \subsection{Description and Notation}\label{description-and-notation}
+  
+  These models of course work for other forms of regression, but we will
+  focus on logistic regression, as it is the method we use in this paper.
+  We will be using notation adapted from Gelman's description of
+  multilevel models. Consider a data set composed of
+  
+  \begin{itemize}
+  \itemsep1pt\parskip0pt\parsep0pt
+  \item
+    \(i\) observations of a binary response variable \(y_i\),
+  \item
+    \(m\) observation level predictors \(X_i = x_i^1, \ldots, x_i^m\),
+  \item
+    \(j\) groups in which the observations are split into,
+  \item
+    \(l\) group level predictors
+    \(U_{j[i]} = u_{j[i]}^1, \ldots, u_{j[i]}^l\), where \(j[i]\) is the
+    group of the \(i\)th observation,.
+  \end{itemize}
+  
+  We could fit a model where the intercept varies by group:
+  
+  \[\mathbb{P} (y_i = 1) = \text{logit}^{-1}
+  (\alpha_{j[i]} + X_i \beta),\]
+  \[\alpha_{j[i]} \sim N(\gamma_0 + U_{j[i]} \gamma, \sigma_{\alpha}^2),\]
+  
+  where \(\alpha_{j[i]}\) is the intercept for the \(j\)th group,
+  \(\beta\) are the coefficients for the observation-level predictors,
+  \(\gamma_0\) are the group-level intercepts, and \(\gamma\) are the
+  coefficients for the group-level predictors. We could also imagine a
+  similar model where there are no group level predictors, such that we
+  simply have different intercepts for each group,
+  \[\alpha_{j[i]} \sim N(\gamma_0, \sigma_{\alpha}^2),\]
+  
+  We can also consider a model that has slopes varying by group. For
+  simplicity, let's consider just one observation level predictor,
+  \(x_i\), that will have varying slopes \(\beta_{j[i]}\) as well as one
+  group level predictor. We could specify the model as,
+  
+  \[\mathbb{P} (y_i = 1) = \text{logit}^{-1}
+  (\alpha_{j[i]} + \beta_{j[i]} x_i),\]
+  
+  \[
+  \left(
+  \begin{array}{c}
+  \alpha_{j}\\
+  \beta_{j}
+  \end{array}
+  \right) =
+  N \left(
+  \left(
+  \begin{array}{c}
+  \gamma_0^\alpha + \gamma_1^\alpha u_j\\
+  \gamma_0^\beta + \gamma_1^\beta u_j
+  \end{array}
+  \right),
+  \left(
+  \begin{array}{cc}
+  \sigma^2_\alpha & \rho \sigma_\alpha \sigma_\beta\\
+  \rho \sigma_\alpha \sigma_\beta & \sigma^2_\beta
+  \end{array}
+  \right)
+  \right).
+  \]
+  
+  \subsection{Examples and Advantages}\label{examples-and-advantages}
+  
+  Gelman puts forward a framework for thinking about multilevel models as
+  a comprimise between no-pooling and complete pooling. For example, for
+  the school example, one could fit a classical regression ignoring the
+  schoolwide data, with students as the level of observation. (That would
+  be ``no pooling''.) Alternatively, one could fit a separate regression
+  for each school.
   
   \chapter{Model 1: Rides and Riders}\label{model-1-rides-and-riders}
+  
+  We start out model simply and then building up. The first problem to
+  approach is handling rider variance. This sections describes how we do
+  that using a random effects terms and demonstrates the improvement in
+  the models fit and predictive accuracy over more classical models.
   
   \section{Choosing Ride-Level
   Parameters}\label{choosing-ride-level-parameters}
