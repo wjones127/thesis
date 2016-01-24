@@ -6,23 +6,27 @@ advisor: 'Andrew Bray'
 department: 'Mathematics'
 title: 'Hierarchical Models for Crowdsourced Bicycle Route Ratings'
 abstract: >
-  The preface pretty much says it all.
+  `r paste(readLines('abstract.Rmd'), collapse = '\n')`
+# If you'd rather include the preliminary content in files instead of inline
+# like below, use a command like that for the abstract above.  Note that a tab is 
+# needed on the line after the >.
 acknowledgements: >
   I want to thank a few people.
 dedication: >
-  You can have a dedication here if you wish.
+  You can have a dedication here if you wish. 
 preface: >
   This is an example of a thesis setup to use the reed thesis document class.
-bibliography: thesis.bib
-csl: apa.csl
+bibliography: bib/thesis.bib
+# Download your specific bibliography database file and refer to it in the line above.
+csl: csl/apa.csl
 # Download your specific csl file and refer to it in the line above.
-output:
-  rticles::reed_thesis:
+output: 
+  reedtemplates::reed_thesis:
     toc: true
 lot: true
 lof: true
-#header-includes:
-#- \usepackage{tikz}
+header-includes:
+- \usepackage{tikz, dsfont}
 ---
 
 <!--
@@ -33,17 +37,18 @@ If you'd prefer to not include a Dedication, for example, simply delete lines 12
 If you'd like to include a comment that won't be produced in your resulting PDF file enclose it in a block like this.
 -->
 
-```{r include_rticles, include = FALSE}
-# This chunk ensures that the rticles package is installed and loaded
-# This rticles package includes the template files for the thesis and also
-# two functions used for labeling and referencing
+```{r include_packages, include = FALSE}
+# This chunk ensures that the reedtemplates package is
+# installed and loaded. This reedtemplates package includes
+# the template files for the thesis and also two functions
+# used for labeling and referencing
 if(!require(devtools))
   install.packages("devtools", repos = "http://cran.rstudio.com")
-if(!require(rticles)){
+if(!require(reedtemplates)){
   library(devtools)
-  devtools::install_github("ismayc/rticles")
-  }
-library(rticles)
+  devtools::install_github("ismayc/reedtemplates")
+}
+library(reedtemplates)
 ```
 
 <!--
@@ -64,7 +69,7 @@ This is for including Chapter 1.  Notice that it's also good practice to name yo
 
 <!--
 Immediately below is the chunk for Chapter 2.
--->
+--> 
 
 ```{r chapter2, child = 'chap2.Rmd'}
 ```
@@ -96,3 +101,4 @@ The bib chunk below must go last in this document according to how R Markdown re
 
 ```{r bib, child = 'bibliography.Rmd'}
 ```
+

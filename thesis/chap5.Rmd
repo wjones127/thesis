@@ -3,34 +3,48 @@ output: pdf_document
 header-includes:
 - \usepackage{graphicx,latexsym}
 - \usepackage{amssymb,amsthm,amsmath}
-- \usepackage{longtable,booktabs,setspace}
+- \usepackage{longtable,booktabs,setspace, dsfont}
 ---
 
 <!--
 You can delete the header-includes (lines 3-6 above) if you like and also the chunk below since it is loaded in the skeleton.Rmd file.  They are included so that chap3.Rmd will compile by itself when you hit Knit PDF.
 -->
 
-```{r include_rticles_5, include = FALSE}
-# This chunk ensures that the rticles package is installed and loaded
-# This rticles package includes the template files for the thesis and also
+```{r include_reedtemplates_5, include = FALSE}
+# This chunk ensures that the reedtemplates package is installed and loaded
+# This reedtemplates package includes the template files for the thesis and also
 # two functions used for labeling and referencing
 if(!require(devtools))
   install.packages("devtools", repos = "http://cran.rstudio.com")
-if(!require(dplyr))
-    install.packages("dplyr", repos = "http://cran.rstudio.com")
-if(!require(ggplot2))
-    install.packages("ggplot2", repos = "http://cran.rstudio.com")
-if(!require(rticles)){
+
+if(!require(reedtemplates)){
   library(devtools)
-  devtools::install_github("ismayc/rticles")
+  devtools::install_github("ismayc/reedtemplates")
   }
-library(rticles)
-flights <- read.csv("flights.csv")
+library(reedtemplates)
 ```
 
 
 # Model 2: Segments as a New Level
 
+Now we have the task of incorporating our knowledge of riders' routes into our
+regression. Our approach here will be to consider routes as sequences of
+discrete road segments, each of which have known properties. This is convenient
+because we have such data about roads that give us bike lanes, road size, etc.
+It is even possible for us to calculate popularity of particular segments easily.
+
+Assume we have $K$ total road segments in our road network and for each ride we
+have $\Omega_i \subseteq \{1, \ldots, K\}$, the set of road segments that are in
+the route of ride $i$. Let $l_k$ be the length of the $k$th segment and define
+the length of ride $i$ to be:
+
+$$ L_i = \sum_{k = 1}^K \mathds{1} \left[k \in \Omega_i \right] \cdot l_k.$$
+
+For the $k$th road segment, we have a vector
+$W_k = W_k^1, W_k^2, \ldots, W_k^m$ of $m$ segment level predictors.
+
+
 ## Choosing Segment-Level Parameters
+
 
 ## Evaluating Segment-Level Models

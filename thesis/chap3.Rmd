@@ -10,24 +10,22 @@ header-includes:
 You can delete the header-includes (lines 3-6 above) if you like and also the chunk below since it is loaded in the skeleton.Rmd file.  They are included so that chap3.Rmd will compile by itself when you hit Knit PDF.
 -->
 
-```{r include_rticles_3, include = FALSE}
-# This chunk ensures that the rticles package is installed and loaded
-# This rticles package includes the template files for the thesis and also
+```{r include_reedtemplates_3, include = FALSE}
+# This chunk ensures that the reedtemplates package is installed and loaded
+# This reedtemplates package includes the template files for the thesis and also
 # two functions used for labeling and referencing
 if(!require(devtools))
   install.packages("devtools", repos = "http://cran.rstudio.com")
-if(!require(dplyr))
-    install.packages("dplyr", repos = "http://cran.rstudio.com")
-if(!require(ggplot2))
-    install.packages("ggplot2", repos = "http://cran.rstudio.com")
-if(!require(rticles)){
+
+if(!require(reedtemplates)){
   library(devtools)
-  devtools::install_github("ismayc/rticles")
+  devtools::install_github("ismayc/reedtemplates")
   }
+library(reedtemplates)
 library(rticles)
 library(arm)
+library(ggplot2)
 library(ggthemes)
-flights <- read.csv("flights.csv")
 ```
 
 # Methods
@@ -51,13 +49,13 @@ how it varies with respect to other quantities.
 Logistic regression is, as we will see, one form of regression generalized from
 linear regression.
 
-Linear regression is the first form of regression most people learn: find the 
+Linear regression is the first form of regression most people learn: find the
 line
 
 $$y_i = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon,$$
 
 based on data with response variable $y_i$ and $j$ predictor variables $x_i$,
-coefficients $\beta_0, \ldots, \beta_j$, and error term $\epsilon \sim 
+coefficients $\beta_0, \ldots, \beta_j$, and error term $\epsilon \sim
 N(0, \sigma^2)$. We can equivalently write,
 
 $$Y \sim N(\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j, \sigma^2).$$
@@ -92,10 +90,10 @@ ggplot(points, aes(x = x, y = y)) + geom_line() +
 ```
 
 
-## Hierarchical Models and Mixed Effects Models
+## Hierarchical Models and Mixed Effects Models {#h-models}
 
 Many data sets contain nested structures when viewed in some way. For example,
-a data set of student test scores may contain information about the schools 
+a data set of student test scores may contain information about the schools
 and districts they are in. Or a dataset of soil samples may have multiple samples
 from each of a set of different sites. In the dataset we examine, rides can be
 grouped by rider.
@@ -107,7 +105,7 @@ later.
 ### Description and Notation
 
 These models of course work for other forms of regression, but we will focus
-on logistic regression, as it is the method we use in this paper. We will be 
+on logistic regression, as it is the method we use in this paper. We will be
 using notation adapted from Gelman's description of multilevel models. Consider
 a data set composed of
 
@@ -123,10 +121,10 @@ $$\mathbb{P} (y_i = 1) = \text{logit}^{-1}
 (\alpha_{j[i]} + X_i \beta),$$
 $$\alpha_{j[i]} \sim N(\gamma_0 + U_{j[i]} \gamma, \sigma_{\alpha}^2),$$
 
-where $\alpha_{j[i]}$ is the intercept for the $j$th group, $\beta$ are the 
+where $\alpha_{j[i]}$ is the intercept for the $j$th group, $\beta$ are the
 coefficients for the observation-level predictors, $\gamma_0$ are the group-level
 intercepts, and $\gamma$ are the coefficients for the group-level predictors. We
-could also imagine a similar model where there are no group level predictors, 
+could also imagine a similar model where there are no group level predictors,
 such that we simply have different intercepts for each group,
 $$\alpha_{j[i]} \sim N(\gamma_0, \sigma_{\alpha}^2),$$
 
@@ -168,6 +166,4 @@ Gelman puts forward a framework for thinking about multilevel models as a
 comprimise between no-pooling and complete pooling. For example, for the school
 example, one could fit a classical regression ignoring the schoolwide data,
 with students as the level of observation. (That would be ``no pooling''.)
-Alternatively, one could fit a separate regression for each school. 
-
-
+Alternatively, one could fit a separate regression for each school.

@@ -58,11 +58,12 @@
 \usepackage{color}
 \newcommand{\VerbBar}{|}
 \newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
-\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+\DefineVerbatimEnvironment{verbatim}{Verbatim}{xleftmargin=-1em}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{xleftmargin=-1em,commandchars=\\\{\}}
 % Add ',fontsize=\small' for more characters per line
 \usepackage{framed}
 \definecolor{shadecolor}{RGB}{248,248,248}
-\newenvironment{Shaded}{\begin{snugshade*}}{\end{snugshade*}}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
 \newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{{#1}}}}
 \newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{{#1}}}
 \newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{{#1}}}
@@ -94,8 +95,6 @@
 \newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{{#1}}}
 \newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{{#1}}}}
 \newcommand{\NormalTok}[1]{{#1}}
-
-
 
 \setlength{\emergencystretch}{3em}  % prevent overfull lines
 \providecommand{\tightlist}{%
@@ -132,6 +131,8 @@
     \addcontentsline{toc}{chapter}{\indexname}
   }{\endoldtheindex}
 }
+
+%\usepackage{natbib}
 
 % Stolen from book.cls and modified
 \let\RToldchapter\chapter

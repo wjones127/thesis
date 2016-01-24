@@ -30,7 +30,8 @@
 % Check out CTAN to see: http://www.ctan.org/
 %%
 \usepackage{graphicx,latexsym}
-\usepackage{amssymb,amsthm,amsmath}
+\usepackage{amsmath}
+\usepackage{amssymb,amsthm}
 \usepackage{longtable,booktabs,setspace}
 \usepackage{chemarr} %% Useful for one reaction arrow, useless if you're not a chem major
 \usepackage{rotating}
@@ -38,6 +39,7 @@
 % Modified by CII
 \usepackage[hyphens]{url}
 \usepackage{hyperref}
+\usepackage{lmodern}
 
 % Added by CII (Thanks, Hadley!)
 % Use ref for internal links
@@ -58,7 +60,7 @@
 \division{Mathematics and Natural Sciences}
 \advisor{Andrew Bray}
 %If you have two advisors for some reason, you can use the following
-%\altadvisor{Your Other Advisor}
+\altadvisor{}
 %%% Remember to use the correct department!
 \department{Mathematics}
 % if you're writing a thesis in an interdisciplinary major,
@@ -70,6 +72,19 @@
 %\approvedforthe{Committee}
 
 % Below added by CII
+
+%%% Copied from knitr
+%% maxwidth is the original width if it's less than linewidth
+%% otherwise use linewidth (to make sure the graphics do not exceed the margin)
+\makeatletter
+\def\maxwidth{ %
+  \ifdim\Gin@nat@width>\linewidth
+    \linewidth
+  \else
+    \Gin@nat@width
+  \fi
+}
+\makeatother
 
 \renewcommand{\contentsname}{Table of Contents}
 
@@ -95,6 +110,7 @@ class.
 The preface pretty much says it all.
 }
 
+\usepackage{tikz, dsfont}
 
 %%
 %% End Preamble
@@ -176,18 +192,18 @@ The preface pretty much says it all.
   situations, in one case to model sexual attraction\footnote{Mackaronis,
     Strassberg, Cundiff, \& Cann (2013)}.
   
-  In a multilevel model, we fit a regression where a slope of intercept
-  term is a random variable whose distribution is unique to all the
-  groupings. For example, if we let \(r_i\) be the rating of the \(i\)th
-  ride, \(X_i\) be the ride-level variables, then we can fit a regression:
+  In a multilevel model, we fit a regression where the intercept term
+  varies by group but comes from a common distribution. For example, if we
+  let \(r_i\) be the rating of the \(i\)th ride, \(X_i\) be the ride-level
+  variables, then we can fit a regression:
   
-  \[\mathbb{P}(r_i = 1) = \text{logit}^{-1} 
-  \left( \alpha_{j[i]} + \beta \cdot X_i \right) ,\] where \(\alpha_j\) is
-  the contribution of the \(j\) rider:
-  \[\alpha_j \sim N (\mu_\alpha, \sigma^2_j).\]
+  \[\mathbb{P}(r_i = 1) = \text{logit}^{-1}
+  \left( \alpha_{j[i]} +  X_i \beta \right) ,\] where \(\alpha_j\) is the
+  contribution of the \(j\) rider:
+  \[\alpha_j \sim N (\mu_\alpha, \sigma^2_\alpha).\]
   
-  We explore multilevel model further in Section 2.1 and multilevel models
-  for riders in Section 4.2.
+  We explore multilevel model further in Section \autoref{h-models} and
+  multilevel models for riders in Section \autoref{add-riders}.
   
   \section{Addressing Road Segments as a
   Level}\label{addressing-road-segments-as-a-level}
@@ -352,8 +368,7 @@ The preface pretty much says it all.
   
   \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-1-1} \end{center}
   
-  \section{Hierarchical Models and Mixed Effects
-  Models}\label{hierarchical-models-and-mixed-effects-models}
+  \section{Hierarchical Models and Mixed Effects Models}\label{h-models}
   
   Many data sets contain nested structures when viewed in some way. For
   example, a data set of student test scores may contain information about
@@ -450,14 +465,30 @@ The preface pretty much says it all.
   \section{Choosing Ride-Level
   Parameters}\label{choosing-ride-level-parameters}
   
-  \section{Adding Random Effects from
-  Riders}\label{adding-random-effects-from-riders}
+  \section{Adding Random Effects from Riders}\label{add-riders}
   
   \section{Evaluating the Ride-Level
   Models}\label{evaluating-the-ride-level-models}
   
   \chapter{Model 2: Segments as a New
   Level}\label{model-2-segments-as-a-new-level}
+  
+  Now we have the task of incorporating our knowledge of riders' routes
+  into our regression. Our approach here will be to consider routes as
+  sequences of discrete road segments, each of which have known
+  properties. This is convenient because we have such data about roads
+  that give us bike lanes, road size, etc. It is even possible for us to
+  calculate popularity of particular segments easily.
+  
+  Assume we have \(K\) total road segments in our road network and for
+  each ride we have \(\Omega_i \subseteq \{1, \ldots, K\}\), the set of
+  road segments that are in the route of ride \(i\). Let \(l_k\) be the
+  length of the \(k\)th segment and define the length of ride \(i\) to be:
+  
+  \[ L_i = \sum_{k = 1}^K \mathds{1} \left[k \in \Omega_i \right] \cdot l_k.\]
+  
+  For the \(k\)th road segment, we have a vector
+  \(W_k = W_k^1, W_k^2, \ldots, W_k^m\) of \(m\) segment level predictors.
   
   \section{Choosing Segment-Level
   Parameters}\label{choosing-segment-level-parameters}

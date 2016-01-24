@@ -4,6 +4,20 @@ output: pdf_document
 
 <!-- The {.unnumbered} option here means that the introduction will be "Chapter 0." -->
 
+```{r include_reedtemplates_0, include = FALSE}
+# This chunk ensures that the reedtemplates package is installed and loaded
+# This reedtemplates package includes the template files for the thesis and also
+# two functions used for labeling and referencing
+if(!require(devtools))
+  install.packages("devtools", repos = "http://cran.rstudio.com")
+
+if(!require(reedtemplates)){
+  library(devtools)
+  devtools::install_github("ismayc/reedtemplates")
+  }
+library(reedtemplates)
+```
+
 # Introduction {.unnumbered}
 
 Knock Software's *Ride Report* app combines a simple thumbs-up/thumbs-down rating system with
@@ -11,11 +25,11 @@ GPS traces of bicycle rides to compile a crowdsourced data set of which routes
 are and are not stressful for urban bicyclists.
 
 The app that collects the data is simple: *Ride Report* automatically detects when
-a user start riding their bike, records the GPS trace of the route, and then 
+a user start riding their bike, records the GPS trace of the route, and then
 prompts the user at the end of the ride to give either a thumbs-up or thumbs-down
 rating. From this, they were able to create a crude "stress map" of Portland, OR,
 which simply shows the average ride rating of rides going through each discretized
-ride segment. 
+ride segment.
 
 The app privileges reducing barriers to response to increase sample size over
 ensuring quality and consistent responses. This presents the first problem: how
@@ -23,7 +37,7 @@ can we analyze ratings when riders are likely rating rides inconsistently?
 
 At the same time, we have another challenge. We have ratings associated with
 routes, but we would like to know the effect of particular road segments, for
-both inference (what effect does this road segment have on the rating?) and 
+both inference (what effect does this road segment have on the rating?) and
 prediction (given a route, what do we expect the rating to be?) purposes.
 
 ## Accounting for Rider Rating Variance
@@ -35,26 +49,24 @@ model this, we propose using multilevel regression, with random effects from
 each rider. This approach has been used in similar situations, in one case to
 model sexual attraction^[@mackaronis2013].
 
-In a multilevel model, we fit a regression where a slope of intercept term is
-a random variable whose distribution is unique to all the groupings. For example,
+In a multilevel model, we fit a regression where the intercept term varies by
+group but comes from a common distribution. For example,
 if we let $r_i$ be the rating of the $i$th ride, $X_i$ be the ride-level variables,
 then we can fit a regression:
 
-$$\mathbb{P}(r_i = 1) = \text{logit}^{-1} 
-\left( \alpha_{j[i]} + \beta \cdot X_i \right) ,$$
+$$\mathbb{P}(r_i = 1) = \text{logit}^{-1}
+\left( \alpha_{j[i]} +  X_i \beta \right) ,$$
 where $\alpha_j$ is the contribution of the $j$ rider:
-$$\alpha_j \sim N (\mu_\alpha, \sigma^2_j).$$
+$$\alpha_j \sim N (\mu_\alpha, \sigma^2_\alpha).$$
 
-We explore multilevel model further in Section 2.1 and multilevel models for riders
-in Section 4.2.
+We explore multilevel model further in Section `r ref("h-models", type = "header")`
+and multilevel models for riders in Section `r ref("add-riders", type="header")`.
 
 ## Addressing Road Segments as a Level
 
-We examine multiple approaches to modeling road segments. In the first, we 
+We examine multiple approaches to modeling road segments. In the first, we
 regard road segments as groups rides belong to, with the catch that rides
 can belong to multiple of these groups.
 
 <!-- might consider researching multi-group multilevel models -->
 <!-- include sample size concerns? Not sure yet. -->
-
-
