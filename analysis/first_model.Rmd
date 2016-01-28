@@ -2,7 +2,9 @@
 title: "First Model"
 author: "Will Jones"
 date: "December 8, 2015"
-output: html_document
+output: pdf_document
+header-includes:
+- \usepackage{dcolumn}
 ---
 
 ```{r, echo=FALSE, warning=FALSE}
@@ -16,68 +18,106 @@ suppressPackageStartupMessages(library(lme4))
 suppressPackageStartupMessages(library(arm))
 suppressPackageStartupMessages(library(caret))
 suppressPackageStartupMessages(library(rstanarm))
+suppressPackageStartupMessages(library(heatmapFit))
+suppressPackageStartupMessages(library(stargazer))
+suppressPackageStartupMessages(library(gridExtra))
 ```
 
-Couldn't find hourly weather yet, but I did find daily weather. We actually
-could simply consider weather to be a random effect: as in the weather during
-the ride is randomly picked from a distribution determined by weather parameters
-like maximum and minimum temperature and percipitation.
 
-```{r}
+## Introduction
+
+As our first steps in modeling ride rating, we will start to model without route
+data. Instead we will focus on other question in the modeling as a start for our
+model:
+
+- How much variation is there between riders in how they tend to rate rides?
+- What relationship does weather, like rain or wind speed, have with ride
+rating?
+- How does ride rating fluxuate with time of day (which we use as a proxy for
+traffic)?
+
+We actually expect a fair amount of the variance in ride rating to be explained
+by these variables, based on tests of a smaller sample.
+
+## Some Numbers about the Data
+
+```{r, echo=FALSE}
 load('../data/rides.RData')
 load('../data/weather_daily.RData')
 load('../data/rain_hourly.RData')
-
-summary(rides)
 ```
 
-Now merge in weather data.
+```{r, echo=FALSE}
+total.obs <- nrow(rides)
+no.response <- rides %>% filter(is.na(stressful)) %>% nrow()
+```
 
-```{r}
+There are `r total.obs` rides in the data set, with `r no.response`
+(`r 100 * no.response / total.obs`%) rides with no rating.
+
+## What variables will we include?
+
+```{r, echo=FALSE}
+# Merging in weather data
 rides.final <- rides %>%
   mutate(date = floor_date(datetime, "day")) %>%
   left_join(weather, by = "date") %>%
-  mutate(datetime = floor_date(datetime, "hour")) %>%
-  left_join(rain, by="datetime")
-
+  mutate(datetime_hour = floor_date(datetime, "hour")) %>%
+  left_join(rain, by=c("datetime_hour" = "datetime"))
 ```
 
-Add traffic indicator. For now we will just consider there to be rush hour if
-the ride took place between the hours of 7:00am - 9:00am or 4:00pm - 7:00pm.
+### Length
 
-```{r}
-during.rush.hour <- function(dates) {
-  (6 < hour(dates) & hour(dates) < 9) | (15 < hour(dates) & hour(dates) < 19)
-}
-
-rides.final$rush.hour <- rides.final$datetime %>%
-  during.rush.hour() 
-
-
+```{r, echo=F, fig.width=5, fig.height=3, fig.align='center'}
+ggplot(rides.final, aes(x = log(length), fill = stressful)) +
+  geom_density(alpha = 0.4) + 
+  labs(title = "Ride Rating and Log Length",
+       xlab = "Log Length",
+       ylab = "Density") + 
+  theme_tufte()
 ```
 
-Some quick graphs:
+### Weather
 
-```{r}
-ggplot(rides.final, aes(x = length, color = stressful)) + geom_density()
+We also want to consider patterns with weather. We have data on daily weather,
+including wind speed, temperature highs and lows, and rain data. But we also
+have hourly rain data from a local fire station.
 
-ggplot(rides.final, aes(x = stressful, y = rain)) + geom_boxplot()
+```{r, echo=F, fig.width=5, fig.height=3, fig.align="center"}
+ggplot(rides.final, aes(x = log(rainfall.4h), fill = stressful)) + 
+  geom_density(alpha = 0.4) + 
+  labs(title="Ride Ratings and Recent Rainfall",
+       xlab="4-Hour Cumulative Rainfall (in)",
+       ylab="Density") + 
+  theme_tufte()
 
-#ggplot(rides.final, aes(x = stressful)) + geom_histogram() + 
-#  facet_wrap(~ rush.hour)
-
-rides.final %>%
-  group_by(rush.hour, stressful) %>%
-  summarise(total =  n())
-
-table(rides.final$rush.hour, rides.final$stressful, dnn=c("Rush Hour", "Stressful")) %>%
-  prop.table(margin=1)
-
-ggplot(rides.final, aes(x = rainfall.4h, color = stressful)) + geom_density()
+ggplot(rides.final, aes(x =log(mean.wind.speed), fill = stressful)) + 
+  geom_density(alpha = 0.4, adjust = 2.5) + 
+  labs(title="Ride Ratings and Daily Windspeed",
+       xlab="Mean Wind Speed of Day of Ride)",
+       ylab="Density") + 
+  theme_tufte()
 ```
 
 
-```{r}
+### Traffic / Daily Trends
+
+We would like to incorporate traffic, but to simplify our model, we may simple
+use time of day as a proxy.
+
+```{r, echo=F, fig.width=5, fig.height=3, fig.align='center'}
+ggplot(rides.final, aes(x = hour(datetime), fill = stressful)) + 
+  geom_density(alpha = 0.4) + 
+  labs(title = "Ride Rating and Time of Day",
+       xlab = "Hour of Day",
+       ylab = "Density") +
+  theme_tufte()
+```
+
+
+
+```{r, echo=FALSE}
+# Data Prep
 rides.scaled <- rides.final %>%
   mutate(log.length = scale(log(length)),
     length = scale(length)) %>%
@@ -93,130 +133,141 @@ rider.avg.lengths <- rides.scaled %>%
 rides.scaled <- rides.scaled %>%
   left_join(rider.avg.lengths, by="rider")
   
+# Create a scaled hour term
+rides.scaled <- rides.scaled %>%
+  mutate(hour = scale(hour(datetime)))
+
 
 inTraining <- createDataPartition(rides.scaled$id, p = .75, list = FALSE)
 
 training <- rides.scaled[inTraining,]
 testing <- rides.scaled[-inTraining,]
 ```
+## The Models
 
-Let's use separation plots!
+### Intercept Baseline Model
 
-```{r}
+First, we might simply try to model ride rating by modeling ride rating $Y$ as
+
+\[ Y \sim \text{Bernoulli}(p), \]
+
+where $p$ is just the probability that a ride is rated "stressful". Essentially,
+what is $p$?
+
+### Classical Model
+
+We also want to consider how a classical logistic regression model compares to
+a model with a random intercept for riders. So we will model:
+
+\[
+Y = \text{logit}^{-1} \left(
+\alpha + \beta_1 \cdot \text{log.length} + \beta_2 \cdot \text{log.windspeed} +
+\beta_3 \cdot \text{log.rainfall.4h}
+\right).
+\]
+
+### Just Rider Random Effects
+
+Now we want to explore how we can capture variance with and between riders. So
+we will use the basic model
+
+\[
+Y \sim \text{Bernoulli} (\text{logit}^{-1}(\alpha_{j[i]})),
+\quad
+\alpha_{j[i]} \sim \text{Normal}(\mu_\alpha, \sigma^2_\alpha).
+\]
+
+
+### Add Time of Day Effects
+
+Now we want to add effects based on time of day. We will try using polynomial
+regression to do this first, by adding to our regression the terms,
+
+\[
+\beta_1 \cdot \text{hour} + 
+\beta_2 \cdot \text{hour}^2 + 
+\beta_3 \cdot \text{hour}^3 + 
+\beta_4 \cdot \text{hour}^4.
+\]
+
+### All Effects
+
+Our last model will take the rider intercepts and day effects and add the terms
+we had in our first regression with variables. 
+
+
+## Table of coefficients
+
+```{r, echo = FALSE}
+# Fit each of the models
+model0 <- glm(stressful ~ 1, data = training, family=binomial(link="logit"))
+model1 <- glm(stressful ~ log.length + rainfall.4h + mean.wind.speed + 1,
+               data = training, family=binomial(link="logit"))
+model2 <- glmer(stressful ~ 1 + (1|rider),
+               data = training, family=binomial(link="logit"))
+model3 <- glmer(stressful ~ 1 + (1|rider) + 
+                  hour + I(hour^2) + I(hour^3) + I(hour^4),
+               data = training, family=binomial(link="logit"))
+model4 <- glmer(stressful ~ 1 + (1|rider) + 
+                  hour + I(hour^2) + I(hour^3) + I(hour^4) + 
+                  log.length + rainfall.4h + mean.wind.speed ,
+               data = training, family=binomial(link="logit"))
+```
+
+```{r, echo=FALSE, results="asis"}
+# Now let's make the table of coefficients
+stargazer(model0, model1, model2, model3, model4, title="results",
+          align=TRUE)
+```
+
+
+
+## Model Accuracy and Fit
+```{r, echo=FALSE}
 separation.plot <- function(data, col.actual, col.probs) {
   results <- data %>%
     arrange_(col.probs) %>%
     select_(col.actual, col.probs) %>%
     rename_(Y = col.actual, Yhat = col.probs)
   
+  expected.true = sum(results$Y)
+  
   ggplot(results) +
     geom_rect(aes(xmin = 0, xmax = seq(length.out = length(Yhat)), ymin = 0, ymax = 1),
               fill = "white") +
-    geom_linerange(aes(color = !Y, ymin = 0, ymax = 1, 
+    geom_linerange(aes(color = Y, ymin = 0, ymax = 1, 
                        x = seq(length.out = length(Yhat)))) + 
     geom_line(aes(y = Yhat, x = seq(length.out = length(Yhat))), lwd = 0.8)  +
     scale_y_continuous("Y-hat\n", breaks = c(0, 0.25, 0.5, 0.75, 1.0)) + 
     scale_x_continuous("", breaks = NULL) +
     theme_linedraw() + 
-    scale_colour_grey(end=1)
+    scale_colour_grey(start=1, end=0) + 
+    geom_point(aes(y = 0, x = length(Yhat) - expected.true), shape=17)
 }
 ```
 
 
-## Intercept Baseline Model
-```{r}
+```{r, fig.width=5, fig.height=1, echo=FALSE}
+model.results <- data.frame(stressful = testing$stressful,
+                            pred0 = predict(model0, newdata=testing, type="response"),
+                            pred1 = predict(model1, newdata=testing, type="response"),
+                            pred2 = predict(model2, newdata=testing, type="response"),
+                            pred3 = predict(model3, newdata=testing, type="response"),
+                            pred4 = predict(model4, newdata=testing, type="response"))
 
-model0.0 <- glm(stressful ~ 1, data = training, family=binomial(link="logit"))
-
-p <- exp(coef(model0.0[1]))
-
-testing$prediction0.0 = predict.glm(model0.0, testing, type="response")
-
-separation.plot(testing, "stressful", "prediction0.0")
-
+separation.plot(model.results, "stressful", "pred0")
+separation.plot(model.results, "stressful", "pred1")
+separation.plot(model.results, "stressful", "pred2")
+separation.plot(model.results, "stressful", "pred3")
+separation.plot(model.results, "stressful", "pred4")
 ```
 
-## Basic Model
-```{r}
-model0 <- glm(stressful ~ log.length + rush.hour + rainfall.4h + mean.wind.speed,
-               data = training, family=binomial(link="logit"))
-
-testing$prediction0 = predict.glm(model0, testing, type="response")
-
-separation.plot(testing, "stressful", "prediction0")
-
-# mean(testing$stressful != testing$prediction0)
-```
-
-
-## Model with Random Rider Effects
-```{r}
-model1 <- glmer(stressful ~ (1|rider) + log.length + rush.hour + rainfall.4h + mean.wind.speed,
-               data = training, family=binomial(link="logit"))
-
-testing$prediction1 = predict(model1, testing, type="response")
-
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results="hide", errors=FALSE}
+heatmap.fit(model.results$stressful, model.results$pred1, reps=5)
+heatmap.fit(model.results$stressful, model.results$pred2, reps=5)
+heatmap.fit(model.results$stressful, model.results$pred3, reps=5)
+heatmap.fit(model.results$stressful, model.results$pred4, reps=5)
 #mean(testing$stressful != testing$prediction1)
 
-
-separation.plot(testing, "stressful", "prediction1")
 ```
 
-There is some clear improvement in the separation when we add random effects
-from riders.
-
-Let's add in rider average log.length.
-
-```{r}
-model2 <- glmer(stressful ~ 1 + (1|rider) + avg.log.length + log.length + rush.hour + rainfall.4h + mean.wind.speed,
-               data = training, family=binomial(link="logit"))
-
-testing$prediction2 = predict(model2, testing, type="response")
-
-#mean(testing$stressful != testing$prediction1)
-
-
-separation.plot(testing, "stressful", "prediction2")
-
-coef(model2)
-```
-
-We aren't getting huge improvements from this model.
-
-
-```{r, echo=FALSE}
-#model2 <- stan_glmer(stressful ~ (1|rider) + log.length + rush.hour + rainfall.4h + mean.wind.speed,
-#                data = rides.scaled, family=binomial(link="logit"))
-
-#testing$prediction2 = ifelse(predict(model2, testing, type="response") >= 0.5, TRUE, FALSE)
-
-#mean(testing$stressful != testing$prediction2)
-
-```
-
-## More quick graphs: Interaction terms?
-
-```{r}
-
-ggplot(rides.scaled, aes(x = jitter(mean.temp), y = jitter(rainfall.4h), color = stressful)) +
-  geom_point()
-
-
-
-```
-
-```{r}
-model3 <- glmer(stressful ~ 1 + (1|rider),
-               data = training, family=binomial(link="logit"))
-
-testing$prediction3 = predict(model3, testing, type="response")
-
-#mean(testing$stressful != testing$prediction1)
-
-
-separation.plot(testing, "stressful", "prediction3")
-
-coef(model3)
-```
-
-How do we treat non-response?
