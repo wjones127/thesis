@@ -3,7 +3,7 @@ output: pdf_document
 header-includes:
 - \usepackage{graphicx,latexsym}
 - \usepackage{amssymb,amsthm,amsmath}
-- \usepackage{longtable,booktabs,setspace}
+- \usepackage{longtable,booktabs,setspace, dsfont}
 ---
 
 <!--
@@ -33,6 +33,45 @@ effects terms and demonstrates the improvement in the models fit and predictive
 accuracy over more classical models.
 
 ## Choosing Ride-Level Parameters
+
+### Weather
+
+
+### Traffic
+
+We would like to have some model for the effect of traffic. We don't have actual
+traffic data, but we do know that there are fluxuations in how riders rate rides
+based on time of day, with somewhat higher rates during the morning and evening.
+The simplist way to model this might be a rush hour indicator:
+
+\[ x_i^{\text{rush.hour}} = 
+\mathds{1} [x_i^{\text{time}} \text{during rush hour}],
+\]
+
+where rush hour is defined as between 7 a.m. and 9 a.m. and 5 p.m. and 7 p.m.
+on weekdays. However this maybe a little too naive. We might also want to simply
+have a term that absorbed all time of day difference in ratings.
+
+We might consider adding a term that is a sinusoidal function with a period of
+one day. We would be interested in fitting a term,
+
+$$A \sin (T x^{\text{time}} + \phi),$$
+
+where $\beta$ and $\phi$ are coefficients estimated and $T = 2 \pi / d,$ where
+$d$ is the period of one day ($8.64 \times 10^7$ milliseconds.) This form isn't
+easy to estimate, but we can transform this expression into the sum of two
+trignometric functions:
+
+\begin{align*}
+A \sin (T x + \phi) &= 
+A \left( \sin (T x) \cos (\phi) + \cos (T x) \sin (\phi) \right)\\
+&= (A + \cos (\phi)) \sin (T x) + \sin (\phi) \cos (T x)\\
+&= \beta_1 \sin (T x) + \beta_2 \cos (T x),
+\end{align*}
+
+where $\beta_1 = A + \cos (\phi)$ and $\beta_2 = \sin (\phi).$ This term won't
+model just traffic; it will probably absorb all effects that are cyclical over
+the day. 
 
 ## Adding Random Effects from Riders {#add-riders}
 

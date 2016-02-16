@@ -65,8 +65,27 @@ and multilevel models for riders in Section `r ref("add-riders", type="header")`
 ## Addressing Road Segments as a Level
 
 We examine multiple approaches to modeling road segments. In the first, we
-regard road segments as groups rides belong to, with the catch that rides
-can belong to multiple of these groups.
+regard add regression term for the route, that is a weighted sum of terms for
+each road segment in the route, weighted by the lengths of the segments. The
+terms for the 
+
+the contribution of the route to be a weighted sum of the contributions
+of road segments in the route, weighted by the lengths of the segments. 
 
 <!-- might consider researching multi-group multilevel models -->
 <!-- include sample size concerns? Not sure yet. -->
+
+
+## Approaching Missing Data at Multiple Levels
+
+This data set contains missing data at two levels.
+
+First, there are many routes without any ratings. The routes taken by riders are
+not a random sample of routes, but are often already chosen by the rider as the
+least stressful ride. As we might expect because of this bias, only a small
+proportion of rides are rated as "stressful."
+
+Second, not every ride that is taken is rated. We do have the route they chose,
+and all associated covariates, but the response variable, rating is missing. As
+we will discuss in chapter `r ref("missing-data", type="header")`, the pattern
+of non-response is unlikely to be unbiased.

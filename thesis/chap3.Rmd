@@ -26,6 +26,7 @@ library(rticles)
 library(arm)
 library(ggplot2)
 library(ggthemes)
+library(dplyr)
 ```
 
 # Methods
@@ -89,6 +90,7 @@ ggplot(points, aes(x = x, y = y)) + geom_line() +
   theme_tufte()
 ```
 
+Logistic regression is sometimes presented as a classification model
 
 ## Hierarchical Models and Mixed Effects Models {#h-models}
 
@@ -167,3 +169,71 @@ comprimise between no-pooling and complete pooling. For example, for the school
 example, one could fit a classical regression ignoring the schoolwide data,
 with students as the level of observation. (That would be ``no pooling''.)
 Alternatively, one could fit a separate regression for each school.
+
+## Tools for evaluating models
+
+There are a couple ways we wish to evaluate our models. Most of the time, we
+will compare them to some other model.
+
+Predictive accuracy will be one aspect of our model we will want to evaluate.
+We will use cross-validation to evaluate accuracy, usually with $K$-fold
+cross-validation. Statistics such as misclassification rate, false-positive
+rate, and true-negative rate can be calculated for each validation. For a more
+comprehensive look at predictive accuracy, we use the separation plot.
+
+### The Separation Plot
+
+The separation plot, created by ____ in their paper ____, is designed to show
+how well a logistic regression model can distinguish between high and low
+probability events.
+
+Creating a separation plot first requires a model fit to training data and testing
+data to evaluate predictive accuracy on. From the testing data, we need a vector
+$Y$ of observed binary response data and a vector $\hat{Y}$ of predicted
+probabilities of a 1 for each observation, predicted using our model fitted to
+training data.
+
+We plot the data $(Y, \hat{Y}$ as a sequence of vertical strips, colored according
+to observed outcome, $Y$, and ordered from low to high probability based on
+$\hat{Y}$. A curve is superimposed upon the stripes showing the $\hat{Y}$ as
+a line graph. And finally, a small triangle is placed indicated the point at
+which the two colors of lines would meet if all observations $Y = 0$ were
+placed to the left of all the $Y=1$ observations; in other words showing where
+the boundary would be if the two classes were perfectly separated by the model.
+
+```{r, echo=F}
+separation.plot <- function(data, col.actual, col.probs) {
+  results <- data.frame(data[col.actual], data[col.probs])
+  names(results) <- c('Y', 'Yhat')
+  results <- results %>% arrange(Yhat)
+  
+  expected.true = sum(results$Y)
+  
+  ggplot(results) +
+    geom_rect(aes(xmin = 0, xmax = seq(length.out = length(Yhat)), ymin = 0, ymax = 1),
+              fill = "white") +
+    geom_linerange(aes(color = Y, ymin = 0, ymax = 1, 
+                       x = seq(length.out = length(Yhat)))) + 
+    geom_line(aes(y = Yhat, x = seq(length.out = length(Yhat))), lwd = 0.8)  +
+    scale_y_continuous("Y-hat\n", breaks = c(0, 0.25, 0.5, 0.75, 1.0)) + 
+    scale_x_continuous("", breaks = NULL) +
+    theme_linedraw() + 
+    scale_colour_grey(start=1, end=0) + 
+    geom_point(aes(y = 0, x = length(Yhat) - expected.true), shape=17)
+}
+# Example of poor model
+example.data <- data.frame(y = (1==rbinom(500, 1, 0.5)), y.hat = runif(500, 0, 1))
+separation.plot(example.data, "y", "y.hat")
+# Example of better model
+better.data <- data.frame(y.hat = seq(0,1, length.out=500))
+draw.bin.with.p <- function(p) { 1==rbinom(1,1,p) }
+better.data$y <- sapply(better.data$y, draw.bin.with.p)
+separation.plot(better.data, "y", "y.hat")
+# Example of perfect model
+example.data <- example.data %>% mutate(y.p = as.numeric(y))
+separation.plot(example.data, "y", "y.p")
+```
+
+Above we have examples of three separation plots. The first plot shows what it
+looks like when $Y$ and $\hat{Y}$ are uncorrelated. The second plot 
+

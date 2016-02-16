@@ -25,7 +25,7 @@ library(reedtemplates)
 ```
 
 
-# Model 2: Segments as a New Level
+# Model 2: Regression Terms for Road Segments
 
 Now we have the task of incorporating our knowledge of riders' routes into our
 regression. Our approach here will be to consider routes as sequences of
@@ -38,10 +38,17 @@ have $\Omega_i \subseteq \{1, \ldots, K\}$, the set of road segments that are in
 the route of ride $i$. Let $l_k$ be the length of the $k$th segment and define
 the length of ride $i$ to be:
 
-$$ L_i = \sum_{k = 1}^K \mathds{1} \left[k \in \Omega_i \right] \cdot l_k.$$
+$$ L_i = \sum_{k \in \Omega_i} l_k.$$
 
-For the $k$th road segment, we have a vector
-$W_k = W_k^1, W_k^2, \ldots, W_k^m$ of $m$ segment level predictors.
+For the $k$th road segment, define the m-dimensional vector
+$W_k = W_k^1, W_k^2, \ldots, W_k^m$ road segment-level predictors.
+Then we shall define the term in our regression for the route of ride $i$ as
+
+$$ R_i = \frac{1}{L_i} \sum_{k \in \Omega_i} l_k W_k \beta^{\text{road}},$$
+
+Where $\beta^{\text{road}}$ is a vector of coefficients for the road segment
+level predictors. When actually computing this value, it may be convenient to 
+factor out the $\beta^{\text{road}}$
 
 
 ## Choosing Segment-Level Parameters
