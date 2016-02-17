@@ -90,6 +90,7 @@
 
 \setlength{\parskip}{0pt}
 
+
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 
@@ -166,9 +167,20 @@ The preface pretty much says it all.
   automatically detects when a user start riding their bike, records the
   GPS trace of the route, and then prompts the user at the end of the ride
   to give either a thumbs-up or thumbs-down rating. From this, they were
-  able to create a crude ``stress map'' of Portland, OR, which simply
-  shows the average ride rating of rides going through each discretized
-  ride segment.
+  able to create a simple ``stress map'' of Portland, OR, which displays
+  the average ride rating of rides going through each discretized ride
+  segment.
+  
+  \begin{figure}[h!tbp]
+  \centering
+  \includegraphics[scale = 1,angle = 0]{figure/stress_map.jpg}
+  \caption[Ride Report's Stress Map for Portland. Greener road segments incidate less
+  while more red segments indicate more stressful streets. ``Stress'' computed by
+  taking the average rating for each segment.]{\normalsize{Ride Report's Stress Map for Portland. Greener road segments incidate less
+  while more red segments indicate more stressful streets. ``Stress'' computed by
+  taking the average rating for each segment.}}
+  \label{fig:stress-map}
+  \end{figure}
   
   The app privileges reducing barriers to response to increase sample size
   over ensuring quality and consistent responses. This presents the first
@@ -181,16 +193,25 @@ The preface pretty much says it all.
   the rating?) and prediction (given a route, what do we expect the rating
   to be?) purposes.
   
+  Finally, there are interesting issues with missing data. First, the
+  sample of rides we have are biased towards routes that riders percieve
+  as better. Second, a significant portion of the rides are missing a
+  response, and non response is unlikely to be independent of the
+  response. The good news is that we have all the predictors for every
+  ride, enabling us to build a model that is able to leverage the data
+  with missing responses rather than listing the missing data as a
+  liability.
+  
   \section{Accounting for Rider Rating
   Variance}\label{accounting-for-rider-rating-variance}
   
   For ratings we are interested in modeling variance between riders (as we
-  might expect different rides to rate differently on average) and within
-  riders (as riders may not rate the same route and conditions the same
-  every time). To model this, we propose using multilevel regression, with
-  random effects from each rider. This approach has been used in similar
-  situations, in one case to model sexual attraction\footnote{Mackaronis,
-    Strassberg, Cundiff, \& Cann (2013)}.
+  might expect riders to have different rating patterns than their peers)
+  and within riders (as riders may not rate the same route and conditions
+  the same every time). To model this, we propose using multilevel
+  regression, with random effects from each rider. This approach has been
+  used in similar situations, in one case to model sexual
+  attraction\footnote{Mackaronis, Strassberg, Cundiff, \& Cann (2013)}.
   
   In a multilevel model, we fit a regression where the intercept term
   varies by group but comes from a common distribution. For example, if we
@@ -198,19 +219,52 @@ The preface pretty much says it all.
   variables, then we can fit a regression:
   
   \[\mathbb{P}(r_i = 1) = \text{logit}^{-1}
-  \left( \alpha_{j[i]} +  X_i \beta \right) ,\] where \(\alpha_j\) is the
-  contribution of the \(j\) rider:
-  \[\alpha_j \sim N (\mu_\alpha, \sigma^2_\alpha).\]
+  \left( \alpha_{j[i]} +  X_i \beta \right) ,\] where \(\alpha_j\) is an
+  intercept specific to rider \(j\). In addition, the rider intercepts
+  come from a common distribution,
+  \[\alpha_j \sim N (\mu_\alpha, \sigma^2_\alpha),\]
   
-  We explore multilevel model further in Section \autoref{h-models} and
-  multilevel models for riders in Section \autoref{add-riders}.
+  where \(\mu_\alpha\) is the mean of all the \(\alpha_j\)s.
+  
+  Using varying intercepts will allow our model to exhibit the property of
+  varying rates of riders giving stressful ratings. This can be extended
+  to model differences in how riders respond to different kinds of road
+  conditions using varying slope models. We explore multilevel model
+  further in Section \autoref{h-models} and multilevel models for riders
+  in Section \autoref{add-riders}.
   
   \section{Addressing Road Segments as a
   Level}\label{addressing-road-segments-as-a-level}
   
   We examine multiple approaches to modeling road segments. In the first,
-  we regard road segments as groups rides belong to, with the catch that
-  rides can belong to multiple of these groups.
+  we regard add regression term for the route, that is a weighted sum of
+  terms for each road segment in the route, weighted by the lengths of the
+  segments. The terms for the
+  
+  the contribution of the route to be a weighted sum of the contributions
+  of road segments in the route, weighted by the lengths of the segments.
+  
+  \section{Approaching Missing Data at Multiple
+  Levels}\label{approaching-missing-data-at-multiple-levels}
+  
+  This data set contains missing data at two levels.
+  
+  First, there are many routes without any ratings. The routes taken by
+  riders are not a random sample of routes, but are often already chosen
+  by the rider as the least stressful ride. As we might expect because of
+  this bias, only a small proportion of rides are rated as ``stressful.''
+  
+  One solution we explore to this problem is adding a segment popularity
+  parameter as a segment-level predictor.
+  
+  Second, not every ride is given a rating. We do have the route they
+  chose, and all associated covariates, but the response variable, rating
+  is missing. As we will discuss in chapter \autoref{missing-data}, the
+  pattern of non-response is unlikely to be unbiased.
+  
+  To address the second problem, we first build a separate probability
+  model that predicts non response, and then integrate that model into our
+  main model.
   
   \chapter{Data Sources}\label{rmd-basics}
   
@@ -233,7 +287,7 @@ The preface pretty much says it all.
   It's easy to create a list. It can be unordered like
   
   \begin{itemize}
-  \itemsep1pt\parskip0pt\parsep0pt
+  \tightlist
   \item
     Item 1
   \item
@@ -244,7 +298,7 @@ The preface pretty much says it all.
   
   \begin{enumerate}
   \def\labelenumi{\arabic{enumi}.}
-  \itemsep1pt\parskip0pt\parsep0pt
+  \tightlist
   \item
     Item 1
   \item
@@ -260,7 +314,7 @@ The preface pretty much says it all.
   
   \begin{enumerate}
   \def\labelenumi{\arabic{enumi}.}
-  \itemsep1pt\parskip0pt\parsep0pt
+  \tightlist
   \item
     Item 1
   \item
@@ -269,7 +323,7 @@ The preface pretty much says it all.
     Item 3
   
     \begin{itemize}
-    \itemsep1pt\parskip0pt\parsep0pt
+    \tightlist
     \item
       Item 3a
     \item
@@ -366,7 +420,9 @@ The preface pretty much says it all.
   probabilities. Other such functions exist and are also used for
   regression of binary variables, such as the probit function.
   
-  \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-1-1} \end{center}
+  \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-2-1} \end{center}
+  
+  Logistic regression is sometimes presented as a classification model
   
   \section{Hierarchical Models and Mixed Effects Models}\label{h-models}
   
@@ -388,7 +444,7 @@ The preface pretty much says it all.
   multilevel models. Consider a data set composed of
   
   \begin{itemize}
-  \itemsep1pt\parskip0pt\parsep0pt
+  \tightlist
   \item
     \(i\) observations of a binary response variable \(y_i\),
   \item
@@ -455,6 +511,49 @@ The preface pretty much says it all.
   be ``no pooling''.) Alternatively, one could fit a separate regression
   for each school.
   
+  \section{Tools for evaluating models}\label{tools-for-evaluating-models}
+  
+  There are a couple ways we wish to evaluate our models. Most of the
+  time, we will compare them to some other model.
+  
+  Predictive accuracy will be one aspect of our model we will want to
+  evaluate. We will use cross-validation to evaluate accuracy, usually
+  with \(K\)-fold cross-validation. Statistics such as misclassification
+  rate, false-positive rate, and true-negative rate can be calculated for
+  each validation. For a more comprehensive look at predictive accuracy,
+  we use the separation plot.
+  
+  \subsection{The Separation Plot}\label{the-separation-plot}
+  
+  The separation plot, created by \_\_\_\_ in their paper \_\_\_\_, is
+  designed to show how well a logistic regression model can distinguish
+  between high and low probability events.
+  
+  Creating a separation plot first requires a model fit to training data
+  and testing data to evaluate predictive accuracy on. From the testing
+  data, we need a vector \(Y\) of observed binary response data and a
+  vector \(\hat{Y}\) of predicted probabilities of a 1 for each
+  observation, predicted using our model fitted to training data.
+  
+  We plot the data \((Y, \hat{Y}\) as a sequence of vertical strips,
+  colored according to observed outcome, \(Y\), and ordered from low to
+  high probability based on \(\hat{Y}\). A curve is superimposed upon the
+  stripes showing the \(\hat{Y}\) as a line graph. And finally, a small
+  triangle is placed indicated the point at which the two colors of lines
+  would meet if all observations \(Y = 0\) were placed to the left of all
+  the \(Y=1\) observations; in other words showing where the boundary
+  would be if the two classes were perfectly separated by the model.
+  
+  \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-3-1} \end{center}
+  
+  \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-3-2} \end{center}
+  
+  \begin{center}\includegraphics{thesis_files/figure-latex/unnamed-chunk-3-3} \end{center}
+  
+  Above we have examples of three separation plots. The first plot shows
+  what it looks like when \(Y\) and \(\hat{Y}\) are uncorrelated. The
+  second plot
+  
   \chapter{Model 1: Rides and Riders}\label{model-1-rides-and-riders}
   
   We start out model simply and then building up. The first problem to
@@ -465,13 +564,54 @@ The preface pretty much says it all.
   \section{Choosing Ride-Level
   Parameters}\label{choosing-ride-level-parameters}
   
+  \subsection{Weather}\label{weather}
+  
+  \subsection{Traffic}\label{traffic}
+  
+  We would like to have some model for the effect of traffic. We don't
+  have actual traffic data, but we do know that there are fluxuations in
+  how riders rate rides based on time of day, with somewhat higher rates
+  during the morning and evening. The simplist way to model this might be
+  a rush hour indicator:
+  
+  \[ x_i^{\text{rush.hour}} = 
+  \mathds{1} [x_i^{\text{time}} \text{during rush hour}],
+  \]
+  
+  where rush hour is defined as between 7 a.m. and 9 a.m. and 5 p.m. and 7
+  p.m. on weekdays. However this maybe a little too naive. We might also
+  want to simply have a term that absorbed all time of day difference in
+  ratings.
+  
+  We might consider adding a term that is a sinusoidal function with a
+  period of one day. We would be interested in fitting a term,
+  
+  \[A \sin (T x^{\text{time}} + \phi),\]
+  
+  where \(\beta\) and \(\phi\) are coefficients estimated and
+  \(T = 2 \pi / d,\) where \(d\) is the period of one day
+  (\(8.64 \times 10^7\) milliseconds.) This form isn't easy to estimate,
+  but we can transform this expression into the sum of two trignometric
+  functions:
+  
+  \begin{align*}
+  A \sin (T x + \phi) &= 
+  A \left( \sin (T x) \cos (\phi) + \cos (T x) \sin (\phi) \right)\\
+  &= (A + \cos (\phi)) \sin (T x) + \sin (\phi) \cos (T x)\\
+  &= \beta_1 \sin (T x) + \beta_2 \cos (T x),
+  \end{align*}
+  
+  where \(\beta_1 = A + \cos (\phi)\) and \(\beta_2 = \sin (\phi).\) This
+  term won't model just traffic; it will probably absorb all effects that
+  are cyclical over the day.
+  
   \section{Adding Random Effects from Riders}\label{add-riders}
   
   \section{Evaluating the Ride-Level
   Models}\label{evaluating-the-ride-level-models}
   
-  \chapter{Model 2: Segments as a New
-  Level}\label{model-2-segments-as-a-new-level}
+  \chapter{Model 2: Regression Terms for Road
+  Segments}\label{model-2-regression-terms-for-road-segments}
   
   Now we have the task of incorporating our knowledge of riders' routes
   into our regression. Our approach here will be to consider routes as
@@ -485,10 +625,18 @@ The preface pretty much says it all.
   road segments that are in the route of ride \(i\). Let \(l_k\) be the
   length of the \(k\)th segment and define the length of ride \(i\) to be:
   
-  \[ L_i = \sum_{k = 1}^K \mathds{1} \left[k \in \Omega_i \right] \cdot l_k.\]
+  \[ L_i = \sum_{k \in \Omega_i} l_k.\]
   
-  For the \(k\)th road segment, we have a vector
-  \(W_k = W_k^1, W_k^2, \ldots, W_k^m\) of \(m\) segment level predictors.
+  For the \(k\)th road segment, define the m-dimensional vector
+  \(W_k = W_k^1, W_k^2, \ldots, W_k^m\) road segment-level predictors.
+  Then we shall define the term in our regression for the route of ride
+  \(i\) as
+  
+  \[ R_i = \frac{1}{L_i} \sum_{k \in \Omega_i} l_k W_k \beta^{\text{road}},\]
+  
+  Where \(\beta^{\text{road}}\) is a vector of coefficients for the road
+  segment level predictors. When actually computing this value, it may be
+  convenient to factor out the \(\beta^{\text{road}}\)
   
   \section{Choosing Segment-Level
   Parameters}\label{choosing-segment-level-parameters}
@@ -528,13 +676,17 @@ The preface pretty much says it all.
   \setlength{\parindent}{-0.20in} \setlength{\leftskip}{0.20in}
   \setlength{\parskip}{8pt}
   
+  \hypertarget{refs}{}
+  \hypertarget{ref-cressie2011}{}
   Cressie, N., \& Wikle, C. K. (2011). \emph{Statistics for
   spatio-temporal data}. John Wiley \& Sons.
   
+  \hypertarget{ref-gelman}{}
   Gelman, A., \& Hill, J. (2006). \emph{Data analysis using regression and
   multilevel/Hierarchical models}. The Edinburgh Building, Cambridge CB2
   8RU, UK: Cambridge University Press, New York.
   
+  \hypertarget{ref-mackaronis2013}{}
   Mackaronis, J. E., Strassberg, D. S., Cundiff, J. M., \& Cann, D. J.
   (2013). Beholder and beheld: A multilevel model of perceived sexual
   appeal. \emph{Archives of Sexual Behavior}.
