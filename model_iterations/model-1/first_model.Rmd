@@ -1,0 +1,403 @@
+---
+title: "First Model"
+author: "Will Jones"
+date: "December 8, 2015"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r load-packages, echo=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggthemes))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(lubridate))
+suppressPackageStartupMessages(library(lme4))
+suppressPackageStartupMessages(library(arm))
+suppressPackageStartupMessages(library(caret))
+suppressPackageStartupMessages(library(stargazer))
+```
+
+
+## Introduction
+
+As our first steps in modeling ride rating, we will start to model without route
+data. Instead we will focus on other question in the modeling as a start for our
+model:
+
+- How much variation is there between riders in how they tend to rate rides?
+- What relationship does weather, like rain or wind speed, have with ride
+rating?
+- How does ride rating fluctuate with time of day (which we use as a proxy for
+traffic)?
+
+We actually expect a fair amount of the variance in ride rating to be explained
+by these variables, based on tests of a smaller sample.
+
+## Some Numbers about the Data
+
+```{r load_data, echo=FALSE}
+load('./rides.RData')
+load('./weather_daily.RData')
+load('./rain_hourly.RData')
+```
+
+```{r summarize_data, echo=FALSE}
+total.obs <- nrow(rides)
+no.response <- rides %>% filter(is.na(stressful)) %>% nrow()
+```
+
+There are `r total.obs` rides in the data set, with `r no.response`
+(`r 100 * no.response / total.obs`%) rides with no rating.
+
+## What variables will we include?
+
+```{r merge_data, echo=FALSE}
+# Merging in weather data
+rides.final <- rides %>%
+  mutate(date = floor_date(datetime, "day")) %>%
+  left_join(weather, by = "date") %>%
+  mutate(datetime_hour = floor_date(datetime, "hour")) %>%
+  left_join(rain, by=c("datetime_hour" = "datetime"))
+```
+
+### Length
+
+```{r plot_length, echo=F, fig.width=5, fig.height=3, fig.align='center'}
+
+rides.final %>%
+  mutate(length.int = cut(log(length), 16)) %>% 
+  filter(!is.na(stressful)) %>%
+  group_by(length.int) %>%
+  summarise(p = mean(stressful), count = n()) %>%
+  ggplot(aes(x = length.int, y = p)) + 
+  geom_bar(stat="identity") + 
+  theme_tufte() + 
+  geom_text(aes(label=count, y = p+0.015)) + 
+  labs(title = "Distribution of Stressful Rating by Ride Length",
+       x = "log length", y = "prob. of stressful rating")
+
+rides.final %>%
+  mutate(length.int = cut(log(length), 16),
+         stressful.is.na = is.na(stressful)) %>% 
+  group_by(length.int) %>%
+  summarise(p = mean(stressful.is.na), count = n()) %>%
+  ggplot(aes(x = length.int, y = p)) + 
+  geom_bar(stat="identity") + 
+  theme_tufte() + 
+  geom_text(aes(label=count, y = p+0.05)) + 
+  labs(title = "Distribution of Nonresponse by Ride Length",
+       x = "log length", y = "prob. of nonresponse")
+
+  
+```
+
+### Weather
+
+We also want to consider patterns with weather. We have data on daily weather,
+including wind speed, temperature highs and lows, and rain data. But we also
+have hourly rain data from a local fire station.
+
+```{r plot_weather, echo=F, fig.width=5, fig.height=3, fig.align="center"}
+
+rides.final %>%
+  mutate(rainfall.int = cut(log(rainfall.4h+1), 16)) %>% 
+  filter(!is.na(stressful)) %>%
+  group_by(rainfall.int) %>%
+  summarise(p = mean(stressful), count = n()) %>%
+  ggplot(aes(x = rainfall.int, y = p)) + 
+  geom_bar(stat="identity") + 
+  theme_tufte() + 
+  geom_text(aes(label=count, y = p+0.015)) + 
+  labs(title = "Distribution of Stressful Rating by Recent Rainfall",
+       x = "rainfall in past four hours", y = "prob. of stressful rating")
+
+rides.final %>%
+  mutate(rainfall.int = cut(log(rainfall.4h + 1), 16),
+         stressful.is.na = is.na(stressful)) %>% 
+  group_by(rainfall.int) %>%
+  summarise(p = mean(stressful.is.na), count = n()) %>%
+  ggplot(aes(x = rainfall.int, y = p)) + 
+  geom_bar(stat="identity") + 
+  theme_tufte() + 
+  geom_text(aes(label=count, y = p+0.05)) + 
+  labs(title = "Distribution of Nonresponse by Recent Rainfall",
+       x = "rainfall in past 4 hours", y = "prob. of nonresponse")
+
+rides.final %>%
+  mutate(wind.int = cut(log(mean.wind.speed+1), 16)) %>% 
+  filter(!is.na(stressful)) %>%
+  group_by(wind.int) %>%
+  summarise(p = mean(stressful), count = n()) %>%
+  ggplot(aes(x = wind.int, y = p)) + 
+  geom_bar(stat="identity") + 
+  theme_tufte() + 
+  geom_text(aes(label=count, y = p+0.015)) + 
+  labs(title = "Distribution of Stressful Rating by Wind Speed",
+       x = "daily mean wind speed", y = "prob. of stressful rating")
+
+rides.final %>%
+  mutate(wind.int = cut(log(mean.wind.speed+1), 16),
+         stressful.is.na = is.na(stressful)) %>% 
+  group_by(wind.int) %>%
+  summarise(p = mean(stressful.is.na), count = n()) %>%
+  ggplot(aes(x = wind.int, y = p)) + 
+  geom_bar(stat="identity") + 
+  theme_tufte() + 
+  geom_text(aes(label=count, y = p+0.05)) + 
+  labs(title = "Distribution of Nonresponse by Wind Speed",
+       x = "daily mean wind speed", y = "prob. of nonresponse")
+
+```
+
+
+### Traffic / Daily Trends
+
+We would like to incorporate traffic, but to simplify our model, we may simple
+use time of day as a proxy.
+
+```{r plot_traffic, echo=F, fig.width=5, fig.height=3, fig.align='center'}
+empirical.p.hourly <- rides.final %>%
+  mutate(hour = as.factor(hour(datetime))) %>%
+  filter(!is.na(stressful)) %>%
+  group_by(hour) %>%
+  summarise(p = mean(stressful))
+
+p.na.hourly <- rides.final %>%
+  mutate(hour = as.factor(hour(datetime)),
+         stressful.is.na = is.na(stressful)) %>%
+  group_by(hour) %>%
+  summarise(p = mean(stressful.is.na))
+  
+
+ggplot(empirical.p.hourly, aes(x = hour, y = p)) +
+  geom_bar(stat="identity") + 
+  labs(title = "Hourly Probability of Stressful Rating") + 
+  theme_tufte()
+
+ggplot(p.na.hourly, aes(x = hour, y = p)) +
+  geom_bar(stat="identity") + 
+  labs(title = "Hourly Probability of Nonresponse") + 
+  theme_tufte()
+```
+
+
+
+```{r prep_data, echo=FALSE}
+# Data Prep
+rides.scaled <- rides.final %>%
+  mutate(log.length = scale(log(length)),
+    length = scale(length)) %>%
+  filter(!is.na(stressful),
+         !is.na(max.temp),
+         !is.na(rain))
+
+# Compute rider average log.length
+rider.avg.lengths <- rides.scaled %>%
+  group_by(rider) %>%
+  summarise(avg.log.length = mean(log.length, na.rm=TRUE))
+
+rides.scaled <- rides.scaled %>%
+  left_join(rider.avg.lengths, by="rider")
+  
+# Create a scaled hour term
+rides.scaled <- rides.scaled %>%
+  mutate(hour = scale(hour(datetime)))
+
+# Create training and testing sets of rides, stratified by rider
+rides.scaled$index <- 1:nrow(rides.scaled)
+inTraining <- numeric(0)
+riders <- rides.scaled$rider %>% unique()
+for (i in riders) {
+  their.rides <- rides.scaled %>% 
+    filter(rider == i) %>%
+    .$index
+  rider.ride.indexes <- sample(their.rides, 
+                               size = ceiling(0.75 * length(their.rides)))
+  inTraining <- c(inTraining, rider.ride.indexes)
+}
+
+training <- rides.scaled[inTraining,]
+testing <- rides.scaled[-inTraining,]
+```
+## The Models
+
+### Classical Model
+
+First, we consider how a classical logistic regression model compares to
+a model with a random intercept for riders. So we will model:
+
+\[
+Y = \text{logit}^{-1} \left(
+\alpha + \beta_1 \cdot \text{log.length} + \beta_2 \cdot \text{log.wind speed} +
+\beta_3 \cdot \text{log.rainfall.4h}
+\right).
+\]
+
+### Just Rider Random Effects
+
+Now we want to explore how we can capture variance with and between riders. So
+we will use the basic model
+
+\[
+Y \sim \text{Bernoulli} (\text{logit}^{-1}(\alpha_{j[i]})),
+\quad
+\alpha_{j[i]} \sim \text{Normal}(\mu_\alpha, \sigma^2_\alpha).
+\]
+
+
+### Add Time of Day Effects
+
+Now we want to add effects based on time of day. We will try using polynomial
+regression to do this first, by adding to our regression the terms,
+
+\[
+\beta_1 \cdot \text{hour} + 
+\beta_2 \cdot \text{hour}^2 + 
+\beta_3 \cdot \text{hour}^3 + 
+\beta_4 \cdot \text{hour}^4.
+\]
+
+### All Effects
+
+Our last model will take the rider intercepts and day effects and add the terms
+we had in our first regression with variables. 
+
+
+## Table of coefficients
+
+For now, we will compute these models using maximum likelihood. Later, we might
+do Bayesian inference with STAN.
+
+```{r fit_models, echo = FALSE}
+# Fit each of the models
+model1 <- glm(stressful ~ log.length + rainfall.4h + mean.wind.speed + 1,
+               data = training, family=binomial(link="logit"))
+model2 <- glmer(stressful ~ 1 + (1|rider),
+               data = training, family=binomial(link="logit"))
+model3 <- glmer(stressful ~ 1 + (1|rider) + 
+                  hour + I(hour^2) + I(hour^3) + I(hour^4),
+               data = training, family=binomial(link="logit"))
+model4 <- glmer(stressful ~ 1 + (1|rider) + 
+                  hour + I(hour^2) + I(hour^3) + I(hour^4) + 
+                  log.length + rainfall.4h + mean.wind.speed ,
+               data = training, family=binomial(link="logit"))
+```
+
+
+
+```{r create_table, echo=FALSE, results="asis"}
+# Now let's make the table of coefficients
+stargazer(model1, model2, model3, model4, type="html", title="results",
+          align=TRUE)
+
+#stargazer(anova(model2, model3, model4), align=TRUE)
+```
+
+
+### Rider Intercepts
+
+```{r rider_intercepts, echo=F}
+rider_intercepts <- data.frame(rider = rownames(coef(model4)$rider[1]),
+                           model3 = coef(model3)$rider[1],
+                           model4 = coef(model4)$rider[1]) %>%
+  tbl_df() %>%
+  rename(model3 = `X.Intercept.`, model4=`X.Intercept..1`) %>%
+  gather(model, intercept, 2:3)
+
+ggplot(rider_intercepts, aes(x = intercept)) + geom_histogram(bins=30) +
+  facet_wrap(~ model, ncol = 1) + 
+  theme_tufte() + 
+  geom_vline(aes(xintercept = mean(intercept)), color = "red") + 
+  labs(title="Distribution of Rider Intercepts")
+```
+
+### Hourly Trends
+
+```{r hourly_plot, echo=FALSE, fig.width=5, fig.height=3, fig.align='center'}
+
+empirical.p.hourly.scaled <- rides.scaled %>%
+  group_by(hour) %>%
+  summarise(p = mean(stressful))
+
+hourly.fun.gen <- function(model) {
+  function(hour) {
+    coefs <- coef(model)$rider
+    intercept <- coefs$`(Intercept)`[1]
+    intercept + 
+      coefs$hour[1] * hour +
+      coefs$`I(hour^2)`[1] * hour^2 +
+      coefs$`I(hour^3)`[1] * hour^3 +
+      coefs$`I(hour^4)`[1] * hour^4
+  }
+}
+model3.hourly <- hourly.fun.gen(model3)
+model4.hourly <- hourly.fun.gen(model4)
+
+hourly.data <- data.frame(hour = seq(min(rides.scaled$hour), max(rides.scaled$hour), length.out=1000))
+hourly.data$stress3 <- model3.hourly(hourly.data$hour)
+hourly.data$stress4 <- model4.hourly(hourly.data$hour)
+
+hourly.data <- hourly.data %>%
+  gather(model, value, stress3, stress4)
+
+ggplot() + 
+  geom_line(aes(x = hour, y = invlogit(value), color = model), data = hourly.data) + 
+  theme_tufte() + 
+  labs(title = "Time of Day Curve",
+       x = "Normalized Hour of Day",
+       y = "Prob(Stressful)") + 
+  geom_bar(aes(x = hour, y = p), data = empirical.p.hourly.scaled, stat="identity")
+```
+
+
+## Model Accuracy and Fit
+```{r sep_plot_def, echo=FALSE}
+separation.plot <- function(data, col.actual, col.probs) {
+  results <- data %>%
+    arrange_(col.probs) %>%
+    select_(col.actual, col.probs) %>%
+    rename_(Y = col.actual, Yhat = col.probs)
+  
+  expected.true = sum(results$Y)
+  
+  ggplot(results) +
+    geom_rect(aes(xmin = 0, xmax = seq(length.out = length(Yhat)), ymin = 0, ymax = 1),
+              fill = "white") +
+    geom_linerange(aes(color = Y, ymin = 0, ymax = 1, 
+                       x = seq(length.out = length(Yhat)))) + 
+    geom_line(aes(y = Yhat, x = seq(length.out = length(Yhat))), lwd = 0.8)  +
+    scale_y_continuous("Y-hat\n", breaks = c(0, 0.25, 0.5, 0.75, 1.0)) + 
+    scale_x_continuous("", breaks = NULL) +
+    theme_linedraw() + 
+    scale_colour_grey(start=1, end=0) + 
+    geom_point(aes(y = 0, x = length(Yhat) - expected.true), shape=17)
+}
+```
+
+### Separation Plots
+
+```{r check_new_levels, echo=FALSE}
+new.levels.rider <- !setequal(levels(training$rider),
+                              levels(testing$rider))
+
+if (new.levels.rider) {
+  training <- training %>% filter(rider %in% levels(training$rider))
+}
+```
+Were there new levels? `r new.levels.rider`.
+```{r pred_sep_plot, fig.width=5, fig.height=1, echo=FALSE, fig.align='center'}
+  
+  model.results <- data.frame(stressful = testing$stressful,
+                              pred1 = predict(model1, newdata=testing, type="response"),
+                              pred2 = predict(model2, newdata=testing, type="response"),
+                              pred3 = predict(model3, newdata=testing, type="response"),
+                              pred4 = predict(model4, newdata=testing, type="response"))
+  
+  separation.plot(model.results, "stressful", "pred1")
+  separation.plot(model.results, "stressful", "pred2")
+  separation.plot(model.results, "stressful", "pred3")
+  separation.plot(model.results, "stressful", "pred4")
+```
+
