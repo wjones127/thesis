@@ -27,6 +27,7 @@ library(arm)
 library(ggplot2)
 library(ggthemes)
 library(dplyr)
+library(gridExtra)
 ```
 
 # Methods
@@ -38,37 +39,39 @@ will use for the rest of this paper.
 ## Logistic Regression
 
 With logistic regression, we seek to fit a model where the response variable is
-binary. We might consider the response variable, $Y$, a Bernoulli random variable,
+binary (i.e. takes on values of 0 or 1, or true or false). We might consider
+the response variable, $Y$, a Bernoulli random variable,
 
 $$Y = \text{Bernoulli}(p),$$
 
-where $p$ is the probability that an observation $y_i = 1,$ for any $i$. (As a binary variable,
-the support of $Y$ is $\{0,1\}$, so $y_i = 0$ otherwise.) Thus, in predicting
-and making inference about a Bernoulli variable, we are concerned with $p$ and
-how it varies with respect to other quantities.
+where $p$ is the probability that an observation $y_i = 1,$ for any $i$ (and 
+probability $1-p$ for $y_i = 0$). Thus, in predicting and making inference about
+a Bernoulli variable, we are concerned with $p$ and how it varies with respect 
+to other quantities.
 
-Logistic regression is, as we will see, one form of regression generalized from
-linear regression.
+Logistic regression is one form of regression generalized from linear regression.
+Recall that in linear regression we use data with response variable $y_i$ and
+$j$ predictors $x_{i1}, \ldots, x_{ij}$ to fit the best-fitting linear function
 
-Linear regression is the first form of regression most people learn: find the
-line
+$$y_i = \beta_0 + \beta_1 x_{i1} + \cdots + \beta_j x_{ij} + \epsilon,$$
 
-$$y_i = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon,$$
-
-based on data with response variable $y_i$ and $j$ predictor variables $x_i$,
-coefficients $\beta_0, \ldots, \beta_j$, and error term $\epsilon \sim
-N(0, \sigma^2)$. We can equivalently write,
+where $\epsilon \sim N(0, \sigma^2)$, by estimating $\beta_0, \ldots, \beta_j$.
+We might can equivalently write,
 
 $$Y \sim N(\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j, \sigma^2).$$
 
-Generalized linear regression uses a ``link function,'' $g$, to modify the regression:
+One big problem with this form of regression is that the range does not match
+the response we want. If we want to measure probabilities as the response
+variable, we would prefer to have the response limited to [0,1] rather than all
+of $\mathbb{R}$. Generalized linear regression uses a ``link function,'' $g$, to 
+modify the regression:
 
 $$g(y_i) = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon.$$
 
-Logistic regression is a form of generalized regression where the `link' function
-is the logit function, $\text{logit}:[0,1] \to \mathbb{R}$:
+In logistic regression, the `link' function is the logit function,
+$\text{logit}:[0,1] \to \mathbb{R}$:
 
-$$ \text{logit} (p) = \log \left(\frac{p}{1-p}\right), $$
+$$\text{logit} (p) = \log \left(\frac{p}{1-p}\right), $$
 
 also known as the log-odds, odds being $p/1-p$ for any probability $p$. So we can
 model this as a Bernoulli random variable where the probability of a 1 is:
@@ -79,26 +82,62 @@ Notice that the inverse logit function maps values from $\mathbb{R}$ to $[0,1]$.
 The function provides a convenient way to map linear combinations of other
 variables onto values that are valid probabilities. Other such functions exist
 and are also used for regression of binary variables, such as the probit function.
+However, logistic regression has better interpretability because it is based
+on odds.
 
 
-```{r, echo=FALSE, fig.width=5, fig.height=3, fig.align='center'}
+```{r, echo=FALSE, fig.width=5, fig.height=3, fig.align='center', results='asis'}
 points <- data.frame(x = (1:1000 - 500) / 30)
 points$y <- invlogit(points$x)
 
-ggplot(points, aes(x = x, y = y)) + geom_line() +
+logit.plot <- ggplot(points, aes(x = x, y = y)) + geom_line() +
   labs(title="Inverse Logit (Logistic) Function") +
   theme_tufte()
+
+ggsave('figure/logit_plot.pdf', width = 4, height = 2.5)
+
+label(path = "figure/logit_plot.pdf", 
+caption = "The inverse logit function gives a convenient way to map linear
+combinations of real numbers to valid probability values.", 
+      label = "logit-plot", type = "figure", scale=1,
+options = "tbh")
 ```
 
-Logistic regression is sometimes presented as a classification model
+Interpreting coefficients is slightly different that a linear regression. If
+we exponentiate the coefficients $\beta_1, \ldots, \beta_j$, we get odds ratios,
+which tell us the multiplicative effect a one-unit increase in the
+corresponding predictor has on the odds.
+
+Logistic regression can be thought of both a classification and regression
+method. We can simply take the estimated probabilities $\hat{p}$ as the response
+variable, making it a regression method. Alternatively, we can set a threshold
+to classify the observations based on their predicted $\hat{p}$ to get a predicted
+outcome $\hat{y}$ which we can more easily compare with observed outcomes.
+
+Both can be useful for evaluating models predictive accuracy: simply using $\hat{p}$
+avoids having to create an arbitrary decision boundary, but requires us to 
+somehow compute an empirical probabilities from the observed outcomes in order
+to make a comparison.
 
 ## Hierarchical Models and Mixed Effects Models {#h-models}
 
 Many data sets contain nested structures when viewed in some way. For example,
 a data set of student test scores may contain information about the schools
-and districts they are in. Or a dataset of soil samples may have multiple samples
-from each of a set of different sites. In the dataset we examine, rides can be
-grouped by rider.
+and districts they are students are in, thus containing the hierarchy of
+districts and schools. As another example, we might have a dataset of soil
+samples of which multiple were taken from each of a selection of site, thus
+containing a hierarchy of sites and samples.
+
+In the data we examine with bicycle rides, we think of rides being grouped by
+rider. We will talk about different ``levels'' of variables corresponding to
+places in this hierarchy. For example, when we refer to ride-level variables,
+we refer to variables that are specific to a ride, where as we refer to
+rider-level variables as those specific to the rider, and thus also all the rides
+that rider takes.
+
+We will also discuss road segment-level variables, which are variables that are
+specific to road segments in the route of a ride. However, there isn't a clear
+road segment-ride hierarchy, so in practise this is somewhat different.
 
 Mutlilevel models allow us to address these kinds of relationships in regression
 models. They provide a number of computational advantages, as we shall describe
@@ -106,7 +145,7 @@ later.
 
 ### Description and Notation
 
-These models of course work for other forms of regression, but we will focus
+These multilevel models work for other forms of regression, but we will focus
 on logistic regression, as it is the method we use in this paper. We will be
 using notation adapted from Gelman's description of multilevel models. Consider
 a data set composed of
@@ -201,7 +240,7 @@ which the two colors of lines would meet if all observations $Y = 0$ were
 placed to the left of all the $Y=1$ observations; in other words showing where
 the boundary would be if the two classes were perfectly separated by the model.
 
-```{r, echo=F}
+```{r, echo=F, results='hide', message=F, warning=F}
 separation.plot <- function(data, col.actual, col.probs) {
   results <- data.frame(data[col.actual], data[col.probs])
   names(results) <- c('Y', 'Yhat')
@@ -223,17 +262,27 @@ separation.plot <- function(data, col.actual, col.probs) {
 }
 # Example of poor model
 example.data <- data.frame(y = (1==rbinom(500, 1, 0.5)), y.hat = runif(500, 0, 1))
-separation.plot(example.data, "y", "y.hat")
+p1<- separation.plot(example.data, "y", "y.hat")
 # Example of better model
 better.data <- data.frame(y.hat = seq(0,1, length.out=500))
 draw.bin.with.p <- function(p) { 1==rbinom(1,1,p) }
 better.data$y <- sapply(better.data$y, draw.bin.with.p)
-separation.plot(better.data, "y", "y.hat")
+p2 <- separation.plot(better.data, "y", "y.hat")
 # Example of perfect model
 example.data <- example.data %>% mutate(y.p = as.numeric(y))
-separation.plot(example.data, "y", "y.p")
+p3 <- separation.plot(example.data, "y", "y.p")
+p.grid <- arrangeGrob(p1, p2, p3, ncol=1)
+
+ggsave('figure/sep_plot_examples.pdf', p.grid, width=6, height=3)
 ```
 
-Above we have examples of three separation plots. The first plot shows what it
-looks like when $Y$ and $\hat{Y}$ are uncorrelated. The second plot 
+```{r, echo=F, results='asis'}
+label(path = "figure/sep_plot_examples.pdf", 
+caption = "Above we have examples of three separation plots. The first plot shows what it
+looks like when $Y$ and $\\hat{Y}$ are uncorrelated. The second plot ", 
+      label = "sep-plot-examples", type = "figure", scale=1,
+options = "tbh")
+```
+
+
 

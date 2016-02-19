@@ -8,45 +8,122 @@ The {#rmd-basics} text after the chapter declaration will allow us to link throu
 
 # Data Sources {#rmd-basics}
 
-Here is a brief introduction into using _R Markdown_. _Markdown_ is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. _R Markdown_ provides the flexibility of _Markdown_ with the implementation of **R** input and output.  For more details on using _R Markdown_ see <http://rmarkdown.rstudio.com>.  
-
-Be careful with your spacing in _Markdown_ documents.  While whitespace largely is ignored, it does at times give _Markdown_ signals as to how to proceed.  As a habit, try to keep everything left aligned whenever possible, especially as you type a new paragraph.  In other words, there is no need to indent basic text in the Rmd document (in fact, it might cause your text to do funny things if you do).
+We combine data from several sources to do our analysis. Information about
+individual rides, including the GPS trace, the rider, and timestamp were
+provided by Ride Report. Weather data were collected from WeatherUnderground
+and a fire station. 
 
 ## Ride Report
 
-It's easy to create a list.  It can be unordered like
+The main bicycle rides data---including the rider IDs, the timestamps, and GPS
+traces---are collected through the Ride Report app, created by Knock Software.
 
-* Item 1
-* Item 2
+When installed on a persons phone, the app attempts to automatically detect when
+the users starts riding their bicycle, based acceleromoter data, when a user
+leaves a familiar wifi network, and some other pieces of data. (I don't have 
+full data on the accuracy of this, but in my personal experience, the app does
+have a tendency to misread many of my car rides as bicycle rides. One can,
+however, correct this misclassification in your own rides on the app.)
 
-or it can be ordered like
+When the application starts collecting a ride, it starts recording a GPS trace.
+It eventually detects when the user stops riding (Probably through a similar
+processes?). One current challenge the application developers have is making sure
+a rider isn't split into two rides when a user stops at a light for too long.
 
-1. Item 1
-4. Item 2
+At the end of the ride, the user is asked through a push notification for a
+rating of the ride. This is also where they can edit the ride, to relabel it
+as a car or transit ride if it had been misclassified. The rating options have
+always been binary, though the wording has varied. For a while it said "Stressful"
+and "Chill", but now it says "Recomend" and "____".
 
-Notice that I intentionally mislabeled Item 2 as number 4.  _Markdown_ automatically figures this out!  You can put any numbers in the list and it will create the list.  Check it out below.
+The application is only availible on iOS. At the time of the start of the thesis,
+the app was in private beta, meaning only people who actively sought out using
+the app were able to use it. Now the application is public and on the Apple 
+App Store, making it more widely availible. Still, most of the users are early
+adopters of technology who own iPhones. This could mean some slight bias in the
+sample of riders toward those with higher socioeconomic status.
 
-To create a sublist, just indent the values a bit (at least four spaces or a tab).  (Here's one case where indentation is key!)
+As there was a long period in which the app was in private beta, the actual
+application changed significantly while data was collected. However, these were
+mostly in details.
 
-1. Item 1
-1. Item 2
-1. Item 3
-    - Item 3a
-    - Item 3b
+### Data Privacy
+
+Because the data involves timestamps and GPS locations of people's commutes, the
+data is very sensitive. (One could easily infer someone's home and workplace
+based on their most commons routes.) Thus, this data is protected by an end-user
+license agreement---commonly referred to as a EULA---which prevents sharing of
+data, without the explicit permission of those involved. 
+
+This presented some challenges for us: how were we to do inference and data 
+exploration without access to the data. 
+
+Ride Report got permission from five individuals to allow me to have their data
+for exploration and model testing. In addition, they allowed me to send them 
+scripts to clean data and run models on larger data sets on computers they
+controlled. 
+
+While this arrangement was somewhat inconvenient for data exploration (there was
+no guarentee that any trends I saw with the five riders generalized at all to
+the population of riders in their database), it had some advantages for
+inference. One of which, meant it would be hard to overfit our model.
+
+In fact, keeping actual data hidden until analysis has been suggested before,
+as a way to prevent p-hacking and other data analysis problems that arise when
+a researcher knows too much about their data.
+
+<!-- 
+TO DO:
+- Add map of Portland density of rides
+- Add screenshots of rating a ride
+- Give graph of missing data
+-->
+
 
 ## Weather Data
 
-Make sure to add white space between lines if you'd like to start a new paragraph.  Look at what happens below in the outputted document if you don't:
+One possible family of predictors for rider rating is weather conditions during
+the ride. Ideally, we would like to know at the time and day of the ride,
 
-Here is the first sentence.  Here is another sentence.  Here is the last sentence to end the paragraph.
-This should be a new paragraph.
+- the temperature
+- whether it is raining / how much it is raining
+- whether the roads are wet or have puddles
+- wind and gust speed
 
-*Now for the correct way:*
+The first two---temperature and percipitation---are included as comfort factors.
+Temperatures that are very hot or very cold, or heavy percipitation could lead
+to less pleasant ride experiences and thus negative ratings.
 
-Here is the first sentence.  Here is another sentence.  Here is the last sentence to end the paragraph.
+The last two---wet road and wind / gust speed---are more safety related. Puddles
+tend to accumulate in bike lanes before main road, which sometimes pushes riders
+into the roads to avoid going through the puddles. Putting riders into the roads 
+can put them in more dangerous situations.
 
-This should be a new paragraph.
+Aerodynamics are particular important for bicyclists: it plays a lot into how
+fast they can get where they want to go. That's one of the principle reasons
+cyclists will go into lower riding positions. Thus, high wind or gust speeds
+may affect rider rating.
+
+We are limiting our study to rides in Portland, OR. We used weather history
+from the KPDX weather station at Portland International Airport downloaded from
+Weather Underground. From this we were able to get daily weather data, including
+
+- Temperature highs, lows, and average
+- percipitation
+- Mean and max wind speed, and gust speed
+
+We also got hourly rainfall data from a data stream at the Portland Fire Bureau
+Rain Gage at 55 SW Ash St., which is just about the geographic center of
+Portland. This just gives raw uncorrected rain guage data, but gives us a fine
+grain look at how much rain there has been recently. 
+
+
+
+
 
 ## Road Data
 
-When you click the **Knit** button above a document will be generated that includes both content as well as the output of any embedded **R** code chunks within the document. You can embed an **R** code chunk like this (`cars` is a built-in **R** dataset):
+To get road feature data, such as bike lanes and intersection types, we had to
+bring in other data. More on this later. (We may use Open Street Map data and/or
+data from civicapps.org/datasets)
+

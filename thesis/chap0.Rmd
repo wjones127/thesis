@@ -36,7 +36,7 @@ label(path = "figure/stress_map.jpg",
 caption = "Ride Report's Stress Map for Portland. Greener road segments incidate less
 while more red segments indicate more stressful streets. ``Stress'' computed by
 taking the average rating for each segment.", 
-      label = "stress-map", type = "figure", scale=2)
+      label = "stress-map", type = "figure", scale=0.75)
 ```
 
 The app privileges reducing barriers to response to increase sample size over
