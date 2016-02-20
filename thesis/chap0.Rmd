@@ -1,5 +1,7 @@
 ---
-output: pdf_document
+output: 
+  pdf_document:
+    keep_tex: true
 ---
 
 <!-- The {.unnumbered} option here means that the introduction will be "Chapter 0." -->
@@ -31,7 +33,7 @@ rating. From this, they were able to create a simple "stress map" of Portland, O
 which displays the average ride rating of rides going through each discretized
 ride segment.
 
-```{r, results="asis", echo=F, fig.width=10}
+```{r, results="asis", echo=F}
 label(path = "figure/stress_map.jpg", 
 caption = "Ride Report's Stress Map for Portland. Greener road segments incidate less
 while more red segments indicate more stressful streets. ``Stress'' computed by
