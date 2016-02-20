@@ -27,12 +27,34 @@ library(reedtemplates)
 
 # Model 1: Rides and Riders
 
-We start out model simply and then building up. The first problem to approach is
-handling rider variance. This sections describes how we do that using a random
-effects terms and demonstrates the improvement in the models fit and predictive
-accuracy over more classical models.
+We start out model simply and then building up. First, we describe a logistic
+regression model to use as our baseline from which we compare our multilevel
+logstic regression models. Then we describe models that account for variance in
+rider rating patterns with varying intercepts and varying slopes. Finally, we
+compare the models.
 
-## Choosing Ride-Level Parameters
+## Baseline Model: Just Ride-Level Parameters
+
+As a starting point, we can create a straight forward logistic regression model,
+where we predict ride rating based on ride level predictors. 
+
+There is a selection of variables to choose from as predictors:
+
+- length
+- weather
+    * rainfall in last hour
+    * rainfall in past four hours
+    * windspeed
+    * gust speed
+- time of day
+
+$$
+\mathbb{P} (y_i = 1) = \text{logit}^{-1} \left(
+\alpha + \beta_1 \cdot x^\text{log.length}_i + \beta_2 \cdot x^\text{log.wind.speed}_i +
+\beta_3 \cdot x^\text{log.rainfall.4h}_i
+\right).
+$$
+
 
 ### Weather
 
