@@ -2,75 +2,145 @@
 output: pdf_document
 ---
 
+```{r include_reedtemplates_1, include = FALSE}
+# This chunk ensures that the reedtemplates package is installed and loaded
+# This reedtemplates package includes the template files for the thesis and also
+# two functions used for labeling and referencing
+if(!require(devtools))
+  install.packages("devtools", repos = "http://cran.rstudio.com")
+
+if(!require(reedtemplates)){
+  library(devtools)
+  devtools::install_github("ismayc/reedtemplates")
+  }
+library(reedtemplates)
+library(arm)
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(gridExtra)
+library(ggmap)
+```
+
 <!--
 The {#rmd-basics} text after the chapter declaration will allow us to link throughout the document back to the beginning of Chapter 1.  These labels will automatically be generated (if not specified) by changing the spaces to hyphens and capital letters to lowercase.  Look for the reference to this label at the beginning of Chapter 2.
 -->
 
-# Data Sources {#rmd-basics}
+# Data Sources {#data-sources}
 
-We combine data from several sources to do our analysis. Information about
+We combine several data sources to do our analysis. Information about
 individual rides, including the GPS trace, the rider, and timestamp were
-provided by Ride Report. Weather data were collected from WeatherUnderground
-and a fire station. 
+provided by Ride Report. Weather data were collected from Weather Underground's
+archive of the KPDX weather station and a Portland Fire Bureau station.
+
+Our goal in this chapter is to discuss this data and what considerations we
+should have in mind before exploring it in depth. This includes how and by whom
+the data was collected, who and what is this data actually representative of,
+and what samples were taken of the data.
+
+Some of these considerations, such as the limited demographics represented in 
+the Ride Report data, pose serious limitations to how our inferences can be
+generalized. Others, such the large number of missing responses in the Ride
+Report data, motivate the analysis we are doing in this thesis.
+Finally, there are other considerations which we will acknowledge here,
+but addressing them is out of the scope of this thesis. This data set contains
+an abunance of potential research questions, only a fraction of which could be
+reasonably addressed in one thesis.
 
 ## Ride Report
+<!-- who is making the app and why -->
+Ride Report's data is the focus of this paper. Knock Software created
+the app to collect large amounts of information about urban cyclists' routes
+and experiences on those routes. The hope is that this information will be
+valuable to city planners.^[Knock's other project is making a cheaper bicycle 
+counter for cities to monitor traffic flow, again intended to be sold to cities 
+wishing to improve bike infrastructure.]
 
-The main bicycle rides data---including the rider IDs, the timestamps, and GPS
-traces---are collected through the Ride Report app, created by Knock Software.
+Ride Report's approach to crowdsourcing this data is particularcly important
+to understand. The app automates every piece of the data collection process 
+except for the rating given by the rider. Thus, the app casts aside nuanced 
+and (somewhat) reliable human input in favor of increasing sample size (i.e.
+one could imagine a similar app where users have more control over how the
+route is recorded, have the ability to rate on a more fine-grained scale, and
+are given more direction in what they are rating for.) This leads to some 
+potential issues that we need to address in our models.
 
-When installed on a persons phone, the app attempts to automatically detect when
-the users starts riding their bicycle, based acceleromoter data, when a user
-leaves a familiar wifi network, and some other pieces of data. (I don't have 
-full data on the accuracy of this, but in my personal experience, the app does
-have a tendency to misread many of my car rides as bicycle rides. One can,
-however, correct this misclassification in your own rides on the app.)
+<!-- how does it work? -->
+Before we get into the potential issues in the data collection, let's examine
+the data collection process itself. When installed on a persons phone, the 
+Ride Report app attempts to automatically detect when
+the user starts riding their bicycle, based acceleromoter data, when a user
+leaves a familiar Wi-Fi network, and some other pieces of information.
+When the app detects the start of a ride, it starts recording a GPS trace.
+At the end of the users ride, the app detects them getting of their bike (in
+a similar process to how it detected the start of a ride) and prompts them to 
+give a rating of the ride. The ride data is saved then, even if the user does
+not provide a rating.
 
-When the application starts collecting a ride, it starts recording a GPS trace.
-It eventually detects when the user stops riding (Probably through a similar
-processes?). One current challenge the application developers have is making sure
-a rider isn't split into two rides when a user stops at a light for too long.
+<!-- potential problems in process -->
+<!-- how common are these errors??? -->
+This automatic detection of when a ride starts and stops leads to two related and
+common errors in the dataset: first, one ride is often split into two or more
+rides at points, such as at a stoplight or a train crossing, where a cyclist
+stops for an extended period of time; second, car rides are sometimes
+misclassified as bicycle rides and vice-versa (car rides are not rated.) The
+app does allow riders to correct the misclassification, but there is currently
+no way to join split rides back together (Knock is working on changing that, 
+though.)
 
-At the end of the ride, the user is asked through a push notification for a
-rating of the ride. This is also where they can edit the ride, to relabel it
-as a car or transit ride if it had been misclassified. The rating options have
-always been binary, though the wording has varied. For a while it said "Stressful"
-and "Chill", but now it says "Recomend" and "____".
+```{r, echo=F, message=F, results='asis'}
+label(path = "figure/ride_report_rating.jpg", 
+caption = "The Ride Report app's interface has changed significantly between
+versions, including the rating text displayed after a ride. This is the current
+version as of Februrary 2015.", 
+      label = "ride-rating", type = "figure", scale=.35,
+options = "tbh")
+```
 
-The application is only availible on iOS. At the time of the start of the thesis,
-the app was in private beta, meaning only people who actively sought out using
+The app only recently became publicly availible and has undergone significant
+changes in the course of it's life. In particular, while the ratings have always
+been binary, the labels have changed at various points in time. For a while the
+rating labels were "Stressful" and "Chill", while now they are labelled 
+"Recommend" and "Avoid" (see `r ref("ride-rating", type="figure")`.) Other 
+fundamentals of the data collection process, have remained constant, however.
+
+<!-- who do the rides represent? -->
+The data colletion method itself has some problems, but there also may be some
+biases in the population of riders using the app. The app is only availible on 
+iOS, so only iPhone owners could use this application which may imply a bias 
+toward riders of higher socioeconomic status. At the time of the start of the 
+thesis, the app was in private beta, meaning only people who actively sought out using
 the app were able to use it. Now the application is public and on the Apple 
-App Store, making it more widely availible. Still, most of the users are early
-adopters of technology who own iPhones. This could mean some slight bias in the
-sample of riders toward those with higher socioeconomic status.
+App Store, making it more widely availible. So many of the earlier rides may be
+people within the developer's personal network. Unfortunately, it's hard to make
+any solid conclusions about the users of the app because Ride Report doesn't 
+collect any demographic data about their riders. 
 
-As there was a long period in which the app was in private beta, the actual
-application changed significantly while data was collected. However, these were
-mostly in details.
+<!-- data privacy and sampling -->
 
-### Data Privacy
-
+One other issue with the Ride Report data guided our analysis: privacy.
 Because the data involves timestamps and GPS locations of people's commutes, the
-data is very sensitive. (One could easily infer someone's home and workplace
-based on their most commons routes.) Thus, this data is protected by an end-user
-license agreement---commonly referred to as a EULA---which prevents sharing of
-data, without the explicit permission of those involved. 
+data is very sensitive: one could easily infer someone's home and workplace
+based on their most commons routes. In fact, this data is protected by an end-user
+license agreement (EULA) which prevents sharing of data, without the explicit 
+permission of those involved. This presented a logistic challenge: how were we
+to do inference and data exploration without access to the data?
 
-This presented some challenges for us: how were we to do inference and data 
-exploration without access to the data. 
+By agreement with Knock Software, identifying data must be kept private. With
+permission from five riders, Knock was able to give us a small subset consisting
+of all the rides from those five riders, to be kept confidential. That is the
+data set we used for prototyping models and some basic exploratory analysis. 
+Knock also agreed to allow us to run models fitting scripts on larger samples
+of their dataset, as long as they were performed on their computers, with
+no identifying data leaving their system.
 
-Ride Report got permission from five individuals to allow me to have their data
-for exploration and model testing. In addition, they allowed me to send them 
-scripts to clean data and run models on larger data sets on computers they
-controlled. 
+While at first this set up seems like an inconvenience, it actually has some 
+advantages. One of the pitfalls of having an entire data set, especially a high 
+dimensional one, is that in performing exploratory analyses it is often too
+easy to find spurious "statistically significant" results. Instead, we must
+come up with our models before running them, greatly limiting the choices we
+can make in the garden of forking paths.
 
-While this arrangement was somewhat inconvenient for data exploration (there was
-no guarentee that any trends I saw with the five riders generalized at all to
-the population of riders in their database), it had some advantages for
-inference. One of which, meant it would be hard to overfit our model.
-
-In fact, keeping actual data hidden until analysis has been suggested before,
-as a way to prevent p-hacking and other data analysis problems that arise when
-a researcher knows too much about their data.
 
 <!-- 
 TO DO:
@@ -82,43 +152,83 @@ TO DO:
 
 ## Weather Data
 
-One possible family of predictors for rider rating is weather conditions during
-the ride. Ideally, we would like to know at the time and day of the ride,
+Slippery roads and formidable winds are no fun for anyone balancing on a
+two-wheeled vehicle. Weather is, then, one of the most obvious family of 
+predictors for ride rating, at least intuitively. We use the time of a ride to
+join in data about the weather conditions during the ride, including
 
-- the temperature
-- whether it is raining / how much it is raining
-- whether the roads are wet or have puddles
-- wind and gust speed
+- the temperature,
+- whether and how much it is raining,
+- whether the roads are wet or have puddles,
+- wind and gust speed.
 
-The first two---temperature and percipitation---are included as comfort factors.
-Temperatures that are very hot or very cold, or heavy percipitation could lead
-to less pleasant ride experiences and thus negative ratings.
+We include the first two, temperature and percipitation, to account for rider
+comfort. A swealtering, frigid, or stormy day could make an unpleasant 
+experience for a bicyclist and thus could lead to more negative ratings.
 
-The last two---wet road and wind / gust speed---are more safety related. Puddles
-tend to accumulate in bike lanes before main road, which sometimes pushes riders
-into the roads to avoid going through the puddles. Putting riders into the roads 
-can put them in more dangerous situations.
+On the other hand, we include the last two, wet road and gust speed, as factors
+that impact safety. During and after storms, puddles often accumulate in bike
+lanes before the center of the road, pushing cyclists into lanes shared by cars,
+which are often more dangerous. <!-- citation for this??? -->
 
-Aerodynamics are particular important for bicyclists: it plays a lot into how
-fast they can get where they want to go. That's one of the principle reasons
-cyclists will go into lower riding positions. Thus, high wind or gust speeds
+Gust speeds impact the aerodynamics of a ride, which are particular important
+for bicyclists. It's one of the main reasons cyclists care about getting into
+lower (and more aerodynamic) rider positions. Thus, high wind or gust speeds
 may affect rider rating.
 
-We are limiting our study to rides in Portland, OR. We used weather history
+```{r, results='asis', echo=F, warning=F, message=F}
+weather_stations <- data.frame(lat = c(45.5887089, 45.5219685),
+                               long = c(-122.5968694, -122.670755),
+                               label = c("KPDX Weather", "PFB Rain Guage"))
+portland_map <- get_map("portland, oregon",
+                        maptype="roadmap",
+                        color="bw",
+                        zoom=12)
+weather_station_map <- ggmap(portland_map) + 
+  geom_point(aes(x = long, y = lat), data = weather_stations) + 
+  geom_label(aes(x = long, y = lat, label = label), 
+             data = weather_stations,
+             nudge_y = -0.007) +
+  labs(x = "longitude", y = "latitude")
+
+ggsave("figure/weather_station_map.pdf", weather_station_map)
+
+label(path = "figure/weather_station_map.pdf", 
+caption = "Positions of weather data collection sites. Daily weather information
+was collected at the KPDX weather station at Portland International Airport. 
+Hourly percipitation data was collected at the Portland Fire Bureau's rain
+guage in downtown Portland.", 
+      label = "weather-stations", type = "figure", scale=1,
+options = "tbh")
+```
+
+We are limiting our study to rides in Portland, Oregon. Given this, we can
+first assume that it may be reasonable to expect that riders are used to the
+same climate, and thus have somewhat similar responses to weather. This also
+makes it reasonable to use data from one nearby weather station, rather than
+attempting to collect from several stations and creating a spatial model for
+weather.
+
+For daily summaries of weather conditions, we used weather history
 from the KPDX weather station at Portland International Airport downloaded from
 Weather Underground. From this we were able to get daily weather data, including
 
-- Temperature highs, lows, and average
-- percipitation
-- Mean and max wind speed, and gust speed
+- Average, minimum, maximum temperature for the day.
+- Total percipitation.
+- Mean wind speed, as well as gust speed (speed of brief, strong winds.)
 
 We also got hourly rainfall data from a data stream at the Portland Fire Bureau
 Rain Gage at 55 SW Ash St., which is just about the geographic center of
 Portland. This just gives raw uncorrected rain guage data, but gives us a fine
 grain look at how much rain there has been recently. 
 
-
-
+For daily weather data, such as temperature highs and average wind speed, we use
+information from the KPDX weather station. This weather station is the best 
+calibrated in the area. It is further from the geographic center of the rides
+we are examining, but because the weather is daily summary statistics, we
+don't expect closer weather stations to be much more informative.
+`r ref("weather-stations", type="figure")` shows the geographic positions of
+these two stations.
 
 
 ## Road Data

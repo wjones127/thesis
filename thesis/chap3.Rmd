@@ -22,68 +22,82 @@ if(!require(reedtemplates)){
   devtools::install_github("ismayc/reedtemplates")
   }
 library(reedtemplates)
-library(rticles)
 library(arm)
 library(ggplot2)
 library(ggthemes)
 library(dplyr)
 library(gridExtra)
+library(binom)
 ```
 
 # Methods
 
-As an undergraduate thesis, a lot of research into methodology was done. Here I
-go through some of the essential methodology, while establishing the notation I
-will use for the rest of this paper.
+In building our models, we use a multitude of statistical methodologies. We
+outline here the central methods used, both to familiarize the reader and to
+establish the notation we use throughout this paper.
+
+Statistics is often split up into prediction and inference. Both are
+important to us here: we use inference to answer our research questions and
+prediction---through cross validation---to evaluate the validity of our models.
+
+Our models combine logistic regression and multilevel regression. To evaluate
+our models, we use graphical tools, such as the separation plot, to examine the 
+performance.
 
 ## Logistic Regression
 
-With logistic regression, we seek to fit a model where the response variable is
-binary (i.e. takes on values of 0 or 1, or true or false). We might consider
-the response variable, $Y$, a Bernoulli random variable,
+Statistical models are often split into regression models---models with 
+a quantitative response---and classification models---models with
+a categorical response. Thus, it may seem odd that we are using a 
+regression model when our response variable, ride rating, is a binary
+outcome.
 
+But, when modeling a binary variable $Y$, we consider it a Bernoulli random variable,
 $$Y = \text{Bernoulli}(p),$$
+where $p$ is the probability the outcome is 1 and $1-p$ is the probability the
+outcome is 0. So our outcome variable $Y$ may be binary, but the primary
+quantity of interest behind that outcome is $p$, a quantitative variable. This
+is why we consider logistic regression a regression method.
 
-where $p$ is the probability that an observation $y_i = 1,$ for any $i$ (and 
-probability $1-p$ for $y_i = 0$). Thus, in predicting and making inference about
-a Bernoulli variable, we are concerned with $p$ and how it varies with respect 
-to other quantities.
-
-Logistic regression is one form of regression generalized from linear regression.
+Logistic regression is one form of generalized linear regression.
 Recall that in linear regression we use data with response variable $y_i$ and
 $j$ predictors $x_{i1}, \ldots, x_{ij}$ to fit the best-fitting linear function
 
 $$y_i = \beta_0 + \beta_1 x_{i1} + \cdots + \beta_j x_{ij} + \epsilon,$$
 
 where $\epsilon \sim N(0, \sigma^2)$, by estimating $\beta_0, \ldots, \beta_j$.
-We might can equivalently write,
+We can equivalently write,
 
 $$Y \sim N(\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j, \sigma^2).$$
 
-One big problem with this form of regression is that the range does not match
-the response we want. If we want to measure probabilities as the response
-variable, we would prefer to have the response limited to [0,1] rather than all
-of $\mathbb{R}$. Generalized linear regression uses a ``link function,'' $g$, to 
-modify the regression:
+We could, in fact, try to predict $p$ with a linear regression, though such a
+model will always have the problem of predicting probabilities outside of the
+range of $[0, 1]$. That's not a recipe for simple interpretation or reliable predictions.
+Generalized linear regression uses a ``link function,'' $g$, to modify the
+regression so the range of the response more accurately reflects the practical
+range of the variable:
 
 $$g(y_i) = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon.$$
 
-In logistic regression, the `link' function is the logit function,
-$\text{logit}:[0,1] \to \mathbb{R}$:
+In logistic regression, the "link" function is the logit function,
+$\text{logit}:[0,1] \to \mathbb{R}$,
 
-$$\text{logit} (p) = \log \left(\frac{p}{1-p}\right), $$
+$$\text{logit} (p) = \log \left(\frac{p}{1-p}\right). $$
 
-also known as the log-odds, odds being $p/1-p$ for any probability $p$. So we can
-model this as a Bernoulli random variable where the probability of a 1 is:
+This function is also known as the log-odds, because odds are defined as $p/1-p$
+for any probability $p$.
+
+So in logistic regression, we model the probability of $y_i = 1$ as,
 
 $$\mathbb{P} (y_i = 1) = \text{logit}^{-1} (\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j).$$
 
-Notice that the inverse logit function maps values from $\mathbb{R}$ to $[0,1]$.
-The function provides a convenient way to map linear combinations of other
+Notice that the inverse logit function^[sometimes called the logistic function] 
+maps values from $\mathbb{R}$ to $[0,1]$.
+Thus, the function provides a convenient way to map linear combinations of other
 variables onto values that are valid probabilities. Other such functions exist
-and are also used for regression of binary variables, such as the probit function.
-However, logistic regression has better interpretability because it is based
-on odds.
+and are also used for regressions with binary responses, such as the probit function.
+Logistic regression, however, is easier to interpret and more efficient to
+compute.
 
 
 ```{r, echo=FALSE, fig.width=5, fig.height=3, fig.align='center', results='asis'}
@@ -103,58 +117,70 @@ combinations of real numbers to valid probability values.",
 options = "tbh")
 ```
 
-Interpreting coefficients is slightly different that a linear regression. If
-we exponentiate the coefficients $\beta_1, \ldots, \beta_j$, we get odds ratios,
-which tell us the multiplicative effect a one-unit increase in the
-corresponding predictor has on the odds.
+Though coefficients from a logistic regression can't be interpreted the same way
+as a linear model, they do have a convenient interpretation. Because the linear
+part of the model represents log odds, the coefficients are log odds ratios;
+That is, the exponentiated coefficients $e^{\beta_1}, \ldots, e^{\beta_j}$
+represent the multiplicative effect a one-unit increase in the corresponding predictor
+has on the odds. For example, if we fit a simple logistic regression with
+$\mathbb{P}(Y = 1) = \text{logit}^{-1} (\alpha + \beta + X)$, we could
+interpret $e^{\beta} = 1.1$ as meaning that a one unit increase in $X$ gives
+a 10% increase in the odds that $Y = 1$.
 
-Logistic regression can be thought of both a classification and regression
-method. We can simply take the estimated probabilities $\hat{p}$ as the response
-variable, making it a regression method. Alternatively, we can set a threshold
-to classify the observations based on their predicted $\hat{p}$ to get a predicted
-outcome $\hat{y}$ which we can more easily compare with observed outcomes.
-
-Both can be useful for evaluating models predictive accuracy: simply using $\hat{p}$
-avoids having to create an arbitrary decision boundary, but requires us to 
-somehow compute an empirical probabilities from the observed outcomes in order
-to make a comparison.
+We started out talking about the ways logistic regression is both a
+classification and regression model. We will mostly care about logistic
+regression as a regression model. One of the main ways we will assess our
+models is through the accuracy of predictions. But, in the classification 
+framework, in order to predict the
+outcomes $\hat{Y}$, we need to choose a probability threshold to decide
+which outcome we should predict for a given observation. When we care mainly
+about prediction, this approach can make sense. Our interest, however, lies in 
+prediction. So rather than choose an arbitrary threshold, we will evaluate the
+accuracy of our predicted probabilities themselves. (How exactly do we do this? 
+See `r ref("evaluate", type="header")`.)
 
 ## Hierarchical Models and Mixed Effects Models {#h-models}
 
-Many data sets contain nested structures when viewed in some way. For example,
-a data set of student test scores may contain information about the schools
-and districts they are students are in, thus containing the hierarchy of
-districts and schools. As another example, we might have a dataset of soil
-samples of which multiple were taken from each of a selection of site, thus
-containing a hierarchy of sites and samples.
+Data often contain hierarchies. For example, a set of student test scores may
+contain the hierarchy of districts and schools those students attend. Or a set
+of soil samples may have been taken at several distinct sites, thus having a
+hierarchy of sites and samples. In the bike ride data we examine, there
+is the hierarchy of riders and rides.
 
-In the data we examine with bicycle rides, we think of rides being grouped by
-rider. We will talk about different ``levels'' of variables corresponding to
-places in this hierarchy. For example, when we refer to ride-level variables,
-we refer to variables that are specific to a ride, where as we refer to
-rider-level variables as those specific to the rider, and thus also all the rides
-that rider takes.
+We will talk about different "levels" of variables corresponding to
+places in this hierarchy. When we refer to "ride-level variables,"
+we refer to variables that are specific to a ride, whereas we refer to
+"rider-level variables" as those specific to the rider, and thus also all the 
+rides that rider takes. For example, we consider length a ride-level variable
+and total number of rides taken a rider-level variable.
 
 We will also discuss road segment-level variables, which are variables that are
-specific to road segments in the route of a ride. However, there isn't a clear
-road segment-ride hierarchy, so in practise this is somewhat different.
+specific to the road segments in the route of a ride (e.g. length, presence of
+bike lanes, etc). But there isn't a clear road segment-ride hierarchy:
+each ride contains multiple road segments and each road segment is contained by
+multiple rides. Thus, this isn't a case where multilevel modeling is applicable.
+(The ideas behind it, though, may be fruitfully adapted.)
 
-Mutlilevel models allow us to address these kinds of relationships in regression
-models. They provide a number of computational advantages, as we shall describe
-later.
-
-### Description and Notation
+Gelman describes two traditional ways of dealing with hierarchical data that
+multilevel models contrasts with: "complete pooling" and "no pooling."^[@gelman, p. 7]
+In "complete pooling," we ignore the group-level variables, and give identical
+estimates for parameters for every group. In "no pooling," we do entirely
+separate regressions for each group. Multilevel models are a comprimise
+between these extremes ("partial pooling", as Gelman calls it) where all the
+data is considered in a single regression with some parameters shared between
+groups and some different between groups. (This will become clearer when we
+introduce examples of models.)
 
 These multilevel models work for other forms of regression, but we will focus
 on logistic regression, as it is the method we use in this paper. We will be
-using notation adapted from Gelman's description of multilevel models. Consider
-a data set composed of
+using notation adapted from Gelman and Hill's description of multilevel 
+models.^[@gelman, p. 251--252] Consider a data set composed of
 
 - $i$ observations of a binary response variable $y_i$,
 - $m$ observation level predictors $X_i = x_i^1, \ldots, x_i^m$,
 - $j$ groups in which the observations are split into,
-- $l$ group level predictors $U_{j[i]} = u_{j[i]}^1, \ldots, u_{j[i]}^l$, where
-$j[i]$ is the group of the $i$th observation,.
+- $l$ group-level predictors $U_{j[i]} = u_{j[i]}^1, \ldots, u_{j[i]}^l$, where
+$j[i]$ is the group of the $i$th observation.
 
 We could fit a model where the intercept varies by group:
 
@@ -162,16 +188,16 @@ $$\mathbb{P} (y_i = 1) = \text{logit}^{-1}
 (\alpha_{j[i]} + X_i \beta),$$
 $$\alpha_{j[i]} \sim N(\gamma_0 + U_{j[i]} \gamma, \sigma_{\alpha}^2),$$
 
-where $\alpha_{j[i]}$ is the intercept for the $j$th group, $\beta$ are the
+where $\alpha_{j[i]}$ is the intercept for the $j$th group, $\beta$ is a vector
 coefficients for the observation-level predictors, $\gamma_0$ are the group-level
-intercepts, and $\gamma$ are the coefficients for the group-level predictors. We
-could also imagine a similar model where there are no group level predictors,
+intercepts, and $\gamma$ is a vector of coefficients for the group-level predictors. 
+We could also specify a similar model where there are no group-level predictors,
 such that we simply have different intercepts for each group,
 $$\alpha_{j[i]} \sim N(\gamma_0, \sigma_{\alpha}^2),$$
 
 We can also consider a model that has slopes varying by group. For simplicity,
-let's consider just one observation level predictor, $x_i$, that will have varying
-slopes $\beta_{j[i]}$ as well as one group level predictor. We could specify the
+let's consider just one observation-level predictor, $x_i$, that will have varying
+slopes $\beta_{j[i]}$ as well as one group-level predictor. We could specify the
 model as,
 
 $$\mathbb{P} (y_i = 1) = \text{logit}^{-1}
@@ -201,28 +227,39 @@ N \left(
 $$
 
 
-### Examples and Advantages
 
-Gelman puts forward a framework for thinking about multilevel models as a
-comprimise between no-pooling and complete pooling. For example, for the school
-example, one could fit a classical regression ignoring the schoolwide data,
-with students as the level of observation. (That would be ``no pooling''.)
-Alternatively, one could fit a separate regression for each school.
 
-## Tools for evaluating models
+## Tools for evaluating models {#evaluate}
+After fitting our models, we will want to know, how do each of our models compare?
+Did adding a particular term enhance or diminish the accuracy of our model?
+While we are fitting our models for inference, we will be evaluating them by 
+the accuracy of their predictions. That is, how accurately and confidently can 
+the model dicern which rides were rated as good and which as bad?
 
-There are a couple ways we wish to evaluate our models. Most of the time, we
-will compare them to some other model.
+The predictions we will evaluate will be done in the context of cross validation.
+Usually, we will just use a simpy 2-fold cross validation, where we split the data into
+two random samples, fitting the model on one set (the "training set"), and
+using the model to predict on the other set (the "testing set") to check
+accuracy. We can also do $k$-fold cross validation, where we split the data into
+$k$ samples, and for each of the samples we train the model with the other $k-1$
+samples and then test with the left out sample.
 
-Predictive accuracy will be one aspect of our model we will want to evaluate.
-We will use cross-validation to evaluate accuracy, usually with $K$-fold
-cross-validation. Statistics such as misclassification rate, false-positive
-rate, and true-negative rate can be calculated for each validation. For a more
-comprehensive look at predictive accuracy, we use the separation plot.
+When splitting the data into testing and training sets, we can not do a simple 
+random sample. If we do, we will end up with riders in the
+testing set that aren't in the training set, which our models that use rider
+information cannot predict on. Thus, we will usually do stratified sampling of
+rides with riders as strata.
+
+<!-- AIC or BIC??? -->
+
+When evaluating the predictions from a model, statistics such as classifications
+rate, false-positive rate, and true-negative rate can be calculated for each 
+validation. For a more comprehensive look at predictive accuracy, we use the 
+separation plot as well as homemade plot to assess our models.
 
 ### The Separation Plot
 
-The separation plot, created by ____ in their paper ____, is designed to show
+The separation plot, created by Greenhill et. al.^[@greenhill2011], is designed to show
 how well a logistic regression model can distinguish between high and low
 probability events.
 
@@ -232,12 +269,12 @@ $Y$ of observed binary response data and a vector $\hat{Y}$ of predicted
 probabilities of a 1 for each observation, predicted using our model fitted to
 training data.
 
-We plot the data $(Y, \hat{Y}$ as a sequence of vertical strips, colored according
+We plot the data $(Y, \hat{Y})$ as a sequence of vertical strips, colored according
 to observed outcome, $Y$, and ordered from low to high probability based on
 $\hat{Y}$. A curve is superimposed upon the stripes showing the $\hat{Y}$ as
 a line graph. And finally, a small triangle is placed indicated the point at
 which the two colors of lines would meet if all observations $Y = 0$ were
-placed to the left of all the $Y=1$ observations; in other words showing where
+placed to the left of all the $Y=1$ observations; in other words, showing where
 the boundary would be if the two classes were perfectly separated by the model.
 
 ```{r, echo=F, results='hide', message=F, warning=F}
@@ -254,35 +291,127 @@ separation.plot <- function(data, col.actual, col.probs) {
     geom_linerange(aes(color = Y, ymin = 0, ymax = 1, 
                        x = seq(length.out = length(Yhat)))) + 
     geom_line(aes(y = Yhat, x = seq(length.out = length(Yhat))), lwd = 0.8)  +
-    scale_y_continuous("Y-hat\n", breaks = c(0, 0.25, 0.5, 0.75, 1.0)) + 
+    scale_y_continuous("Y-hat\n", breaks = c(0, 0.5, 1.0)) + 
     scale_x_continuous("", breaks = NULL) +
-    theme_linedraw() + 
-    scale_colour_grey(start=1, end=0) + 
+#    theme_linedraw() + 
+    scale_colour_grey(start=.95, end=.2) + 
     geom_point(aes(y = 0, x = length(Yhat) - expected.true), shape=17)
 }
 # Example of poor model
 example.data <- data.frame(y = (1==rbinom(500, 1, 0.5)), y.hat = runif(500, 0, 1))
-p1<- separation.plot(example.data, "y", "y.hat")
+p1<- separation.plot(example.data, "y", "y.hat") + theme_tufte()
 # Example of better model
-better.data <- data.frame(y.hat = seq(0,1, length.out=500))
+better.data <- data.frame(y.hat = invlogit(seq(-3,3, length.out=500)))
 draw.bin.with.p <- function(p) { 1==rbinom(1,1,p) }
 better.data$y <- sapply(better.data$y, draw.bin.with.p)
-p2 <- separation.plot(better.data, "y", "y.hat")
+p2 <- separation.plot(better.data, "y", "y.hat") + theme_tufte()
 # Example of perfect model
 example.data <- example.data %>% mutate(y.p = as.numeric(y))
-p3 <- separation.plot(example.data, "y", "y.p")
+p3 <- separation.plot(example.data, "y", "y.p") + theme_tufte()
 p.grid <- arrangeGrob(p1, p2, p3, ncol=1)
 
-ggsave('figure/sep_plot_examples.pdf', p.grid, width=6, height=3)
+ggsave('figure/sep_plot_examples.pdf', p.grid, width=5.5, height=2.5)
 ```
 
 ```{r, echo=F, results='asis'}
 label(path = "figure/sep_plot_examples.pdf", 
-caption = "Above we have examples of three separation plots. The first plot shows what it
-looks like when $Y$ and $\\hat{Y}$ are uncorrelated. The second plot ", 
+caption = "Above we have examples of three separation plots. The first plot shows
+what it looks like when $Y$ and $\\hat{Y}$ are uncorrelated. The second plot 
+shows a fairly good model, where the $Y$ are generated as Bernoulli($\\hat{Y}$).
+The third plot shows a model where the responses are fully separated.", 
       label = "sep-plot-examples", type = "figure", scale=1,
 options = "tbh")
+
 ```
 
+Separation plots don't do well with larger sample sizes: if there are two many
+observations, it becomes difficult to read. This is because the resolution of
+the medium the plot is displayed on may not be fine-grained enough to show a 
+single observation's line, thus obscuring the pattern. In these cases, we can
+plot a random sample or modify the graph to be more suitable.
 
+### Our Probability Plots
+
+One graphical tool we adapted for this project maps probabilities of the outcome
+against continuous variables. We use this for exploration to understand the
+relationship between predictors and our binary response, but it's also useful
+for evaluating our models.
+
+The goal of the plot is to show a measure of an emperical $\hat{p}$, the
+probability that the response is 1, on the y-axis, and a continuous variable
+$X$ on the x-axis. A simple approach would be to bin the observations by the
+values of $X$, and within each bin, model the data as a bernoulli random variable
+and compute a local value for $p$.
+
+The problem with the binning approach is that we get some error due to how we
+happen to bin things. An alternative is to do the same computation for a sliding
+window rather than a bin. This reduces the error due to our binning, but we
+still have to choose a proper window width. We will choose the window width that
+minimizes the leave-one-out error (the sum of the squares of the error in 
+predicting a single observations based on a regression fitted to the rest of
+the observations.)
+
+
+```{r, echo=F, results='hide', message=F, warning=F}
+prob_var_plot <- function(data, x_var, y_var, window_width, method="bayes") {
+  # Load and filter data =======================================================
+  n <- 100
+  orig_data <- data[!is.na(data[[y_var]]),] %>% select_(x_var, y_var)
+  orig_data <- orig_data[!is.na(orig_data[[x_var]]),]
+  orig_data[[y_var]] <- as.numeric(orig_data[[y_var]])
+
+  plot_data <- data.frame(x_reg = seq(from=min(orig_data[x_var]),
+                                      to=max(orig_data[x_var]),
+                                      length.out = n))
+
+  plot_data <- plot_data %>%
+    mutate(x_left = x_reg - window_width,
+           x_right = x_reg + window_width,
+           count = rep(0, n),
+           total = rep(0, n))
+
+  # Compute counts for each window
+
+  for (i in 1:nrow(plot_data)) {
+    in_window <- (orig_data[x_var] < plot_data$x_right[i]) &
+      (orig_data[x_var] > plot_data$x_left[i])
+    plot_data$count[i] <- sum(orig_data[[y_var]][in_window])
+    plot_data$total[i] <- sum(in_window)
+  }
+
+  # Compute confidence intervals for all the windows
+  conf_int <- binom.confint(plot_data$count, plot_data$total, method=method)
+
+  # Create the plot
+  ggplot() +
+    geom_point(shape=124, aes(x = orig_data[[x_var]],
+                              y = orig_data[[y_var]]), data = orig_data) +
+    geom_ribbon(data = conf_int, aes(x = plot_data$x_reg, ymin = lower, ymax = upper)) +
+    geom_line(data = conf_int, aes(x = plot_data$x_reg, y= mean))
+}
+
+prob_data <- data.frame(X = runif(1000, 0, 1))
+prob_data$Y <- rbinom(1000, 1, prob_data$X)
+prob_plot_example <- prob_var_plot(prob_data, "X", "Y", .2) + theme_tufte() + 
+  labs(x = "X", y = "Y")
+
+ggsave('figure/prob_plot_example.pdf', prob_plot_example, width=4, height=2.5)
+```
+
+```{r, echo=F, results='asis'}
+label(path = "figure/prob_plot_example.pdf", 
+caption = "Example of probability plot. 1000 $X$s were sampled from the distribution
+$\\text{Uniform}(0,1)$ and each $Y_i$ was generated from the distribution
+$Y_i \\sim \\text{Bernoulli}(X_i)$. The smoothed curve shows an approximation of $p$
+for each value of $X_i$, with 90\\% confidence intervals in grey.", 
+label = "prob-plot-example", type = "figure", scale=1,
+options = "tbh")
+
+```
+
+We also make use of this plot to compare the predicted probabilities for a 
+testing set to the empirical probablilities in the data. J. Esarey and A. Pierce
+advocate using this in their heatmap plot to assess model fit, showing that such 
+a plot will show model mispecification problems better than other measures
+commonly used, like AIC.^[@esarey2012]
 
