@@ -13,7 +13,7 @@ abstract: >
 acknowledgements: >
   I want to thank a few people.
 dedication: >
-  You can have a dedication here if you wish. 
+  I want to thank a few people.
 preface: >
   This is an example of a thesis setup to use the reed thesis document class.
 bibliography: bib/thesis.bib

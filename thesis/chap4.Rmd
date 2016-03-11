@@ -22,67 +22,129 @@ if(!require(reedtemplates)){
   devtools::install_github("ismayc/reedtemplates")
   }
 library(reedtemplates)
+library(dplyr)
+library(ggplot2)
+library(lme4)
 ```
 
 
 # Model 1: Rides and Riders
 
-We start out model simply and then building up. First, we describe a logistic
-regression model to use as our baseline from which we compare our multilevel
-logstic regression models. Then we describe models that account for variance in
-rider rating patterns with varying intercepts and varying slopes. Finally, we
-compare the models.
+Complex statistical models can accurately model intricate processes. But they
+also run the risk of overfitting to data. To avoid this, we build up our models
+ from simple to complex, comparing the models with cross validation
+to make sure the complexities introduced add real value to the models.
 
-## Baseline Model: Just Ride-Level Parameters
+For our first few iterations of our models, we ignore routes and focus on 
+ride and rider-level predictors. We start here, in part, to demonstrate just
+how much of the variance in ride rating can be explained without examining
+routes. Though we also present this first because this was the first piece we
+approached, because the data transformations for routes were a complex problem.
 
-As a starting point, we can create a straight forward logistic regression model,
-where we predict ride rating based on ride level predictors. 
+In this chapter we focus on building models that incorporate information about
+rider, weather conditions, time of day, and ride length. In brief, our models 
+start with a logistic regression model considering only
+ride-level variables, and formulate more complex models by adding
 
-There is a selection of variables to choose from as predictors:
+1. a random intercept for riders,
+2. average ride length as a rider-level predictor,
+3. forth-degree polynomial terms for time of day,
+4. sinusoidal terms for time of day,
+5. a non-parametric smoother for time of day (integrated with rest of model
+using an additive model),
+6. a non-parametric smoother for ride length.
 
-- length
-- weather
-    * rainfall in last hour
-    * rainfall in past four hours
-    * windspeed
-    * gust speed
-- time of day
+## The Models
 
-$$
-\mathbb{P} (y_i = 1) = \text{logit}^{-1} \left(
-\alpha + \beta_1 \cdot x^\text{log.length}_i + \beta_2 \cdot x^\text{log.wind.speed}_i +
-\beta_3 \cdot x^\text{log.rainfall.4h}_i
-\right).
-$$
+Our first model, which we will use as the baseline for comparing further models,
+is a multivariate logistic regression model. Our set of predictors are
 
+- $X^\text{length}$, standardized ride length
+- $X^\text{rain}$, rainfall during hour of ride, in tenths of inches
+- $X^\text{rain4h}$, rainfall during past four hours before ride, in tenths of inches
+- $X^\text{gust}$, gust speed for the day, in miles per hour
+- $X^\text{temp}$, average temperature, in degrees Fahrenheit.
 
-### Weather
+These $p=5$ predictors will be our standard ride-level predictors in this chapter. We
+will denote the vector of these predictors for the $i$th ride as $X_i$:
 
+$$X = (X^\text{length} \; X^\text{rain} \; X^\text{rain4h} \; X^\text{gust} \; X^\text{temp}).$$
 
-### Traffic
+Let $Y_i = 1$ if the $i$th ride received a negative rating, and $Y_i = 0$ if it 
+received a positive rating. Then, our first model will be,
 
-We would like to have some model for the effect of traffic. We don't have actual
-traffic data, but we do know that there are fluxuations in how riders rate rides
-based on time of day, with somewhat higher rates during the morning and evening.
-The simplist way to model this might be a rush hour indicator:
+$$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + X_i \beta),$$
 
-\[ x_i^{\text{rush.hour}} = 
-\mathds{1} [x_i^{\text{time}} \text{during rush hour}],
-\]
+where $\alpha \in \mathbb{R}$ and $\beta \in \mathbb{R}^p$ are parameters to be
+estimated.
 
-where rush hour is defined as between 7 a.m. and 9 a.m. and 5 p.m. and 7 p.m.
-on weekdays. However this maybe a little too naive. We might also want to simply
-have a term that absorbed all time of day difference in ratings.
+```{r, echo=F, results='asis'}
+label(path = "figure/rider_avgs.pdf", 
+caption = "The overall rates at which each rider gives a negative rating for a
+ride varies greatly. This is our primary motivation for including rider intercepts
+and predictors.", 
+      label = "rider-avgs", type = "figure", scale=1,
+options = "tbh")
+```
 
-We might consider adding a term that is a sinusoidal function with a period of
-one day. We would be interested in fitting a term,
+Riders appear to have different tendencies to rate rides negatively more often,
+as we note in `r ref("rider-avgs")`. To model this, we can add intercepts that vary by rider:
+
+$$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta).$$
+
+Rider intercepts themselves aren't as interesting than how they deviate from the
+mean, so we actually keep a fixed intercept $\alpha$ and constrain the rider 
+intercepts, $\alpha_j$, by specifying
+
+$$\alpha_j \sim N(0, \sigma^2_\alpha).$$
+
+<!--Being able to account for different intercepts for each rider can add some more
+flexibility to the model, but there is one potential problem: If the intercept
+is correlated with other predictors, this can induce some bias in our estimate
+of the intercepts.^[@bafumi2006] Rider intercepts are likely very correlated with
+other general patterns for riders such as ride length and route. Riders who are
+primarily commuters and riders who are primarily pleasure cyclists have very 
+different typical ride lengths, and thus the effect of their ride lengths might
+show up in the intercept. A quick solution to this problem is to add the average
+of correlated varaibles as a group predictor. -->
+
+We may also want to explore adding a rider-level predictor. Average length of
+ride could help differentiate possible types of riders: commuting cyclists will
+generally have shorter rides than atheletic cyclists. To incorporate this, we 
+specify $\alpha_j$ as
+
+$$\alpha_j \sim N(\gamma_0 + u_j \gamma, \sigma^2_\alpha),$$
+
+where,
+
+- $u_j$ is the average ride length for rider $j$,
+- $\gamma_0, \gamma, \sigma^2_\alpha \in \mathbb{R}$ are the parameters to be
+estimated.
+
+Now we can also address time of day as a predictor. We use time of day to
+account for the various daily trends that may affect ratings, including as a
+simple way to model the overall traffic level, which is difficult to model on
+it's own. These patterns
+are cyclic and very non-linear, which makes them difficult to model easily. If
+we ignore the cyclic pattern, we can use a fourth degree polynomial. So, if
+we have the variable $t_i$ as the time of day for the $i$th ride, our model
+becomes
+
+$$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta 
++ \beta^{t1} t + \beta^{t2} t^2 + \beta^{t3} t^3 + \beta^{t4} t^4).$$
+
+There will necessarily be a discontinuity at midnight in the daily cycle, but
+since there are few rides at that time, such a model may perform just fine.
+However, we can use a similarly flexible parametric approach that does have a
+cyclic constraint: adding sinusoidal terms with a period of one day.
+ We would be interested in fitting a term,
 
 $$A \sin (T x^{\text{time}} + \phi),$$
 
 where $\beta$ and $\phi$ are coefficients estimated and $T = 2 \pi / d,$ where
 $d$ is the period of one day ($8.64 \times 10^7$ milliseconds.) This form isn't
 easy to estimate, but we can transform this expression into the sum of two
-trignometric functions:
+trigonometric functions:
 
 \begin{align*}
 A \sin (T x + \phi) &= 
@@ -91,10 +153,93 @@ A \left( \sin (T x) \cos (\phi) + \cos (T x) \sin (\phi) \right)\\
 &= \beta_1 \sin (T x) + \beta_2 \cos (T x),
 \end{align*}
 
-where $\beta_1 = A + \cos (\phi)$ and $\beta_2 = \sin (\phi).$ This term won't
-model just traffic; it will probably absorb all effects that are cyclical over
-the day. 
+where $\beta_1 = A + \cos (\phi)$ and $\beta_2 = \sin (\phi).$ To add a little
+more flexibility, we can also add another sinusoidal term with half the period.
+This would make our model,
 
-## Adding Random Effects from Riders {#add-riders}
+$$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta 
++ \beta^{t1} \sin(T \cdot t) + \beta^{t2} \cos (T \cdot t)
++ \beta^{t3} \sin(T/2 \cdot t) + \beta^{t4} \cos (T/2 \cdot t)).$$
 
-## Evaluating the Ride-Level Models
+We can also abandon parametric methods and use a cyclic non-parametric smoother
+to model time. The only problem is that we need a way to combine our parametric
+and multilevel parts of the model with a new non-parametric part. This is
+where additive models come in. <!-- add more about non-parametric models. -->
+
+```{r, echo=F, results="asis"}
+label(path = "figure/length_prob_plot.pdf", 
+caption = "Approximate probability of stresfful rating by length. Probabilities
+as Binomial probability estimates, with exact confidence intervals, for a sliding
+window.", 
+      label = "length-prob-plot", type = "figure", scale=1,
+options = "tbh")
+
+label(path = "figure/hour_prob_plot.pdf", 
+caption = "Approximate probability of stresfful rating by time of day. Probabilities
+as Binomial probability estimates, with exact confidence intervals, for a sliding
+window.", 
+      label = "hour-prob-plot", type = "figure", scale=1,
+options = "tbh")
+```
+
+
+## Model Evaluation
+
+```{r, eval=FALSE, echo=FALSE}
+logistic <- function(x) { 1 / (1 + exp(-x)) }
+n_obs <- 100
+groups_intercepts <- rnorm(5, 0, 1)
+corr_simulation <- data.frame(x = rnorm(n_obs, 10, 10),
+                              group = sample(1:5, n_obs, replace=TRUE)) %>%
+  mutate(p = logistic(-16 + 1.4 * x + groups_intercepts[group]),
+         y = rbinom(n_obs, 1, p))
+
+naive_model <- glm(y ~ x, data = corr_simulation, family=binomial)
+ml_model <- glmer(y ~ 1 + x + (1|group), data = corr_simulation, family=binomial)
+summary(naive_model)
+summary(ml_model)
+coef(ml_model)$group$`(Intercept)`
+groups_intercepts -16
+
+
+generate_data <- function(n_obs = 1000) {
+    rider_avg_x <- rnorm(5, 1, 2)
+  corr_simulation <- data.frame(group = sample(1:5, n_obs, replace=TRUE)) %>%
+    mutate(x = rnorm(n_obs, rider_avg_x[group], .1),
+           p = logistic(-3 + .05 * x + groups_intercepts[group]),
+           y = rbinom(n_obs, 1, p))
+  corr_simulation
+}
+
+hist(corr_simulation$p)
+
+fit_naive <- function(df) {
+  model <- glmer(y ~ 1 + x + (1|group), data = df, family=binomial)
+  return(fixef(model)[["(Intercept)"]])
+}
+fit_smart <- function(df) {
+    # Add mean length data
+    mean_lengths <- df %>%
+    group_by(group) %>%
+    summarise(mean_x = mean(x))
+    new_df <- left_join(df, mean_lengths, by="group")
+  
+    model <- glmer(y ~ 1 + mean_x + x + (1|group), data = new_df, family=binomial)
+    return(fixef(model)[["(Intercept)"]])
+}
+
+model_test <- data.frame(iter = 1:1000,
+                         intercept_naive = numeric(1000),
+                         intercept_smart = numeric(1000))
+for (i in 1:1000) {
+data <- generate_data()
+model_test$intercept_naive[i] <- fit_naive(data)
+model_test$intercept_smart[i] <- fit_smart(data)
+}
+ggplot(model_test) + 
+  geom_histogram(fill="red", alpha=0.5, aes(x = intercept_naive)) + 
+  geom_histogram(fill="blue", alpha=0.5, aes(x = intercept_smart)) + 
+  geom_vline(xintercept=0.1 + mean(groups_intercepts))
+```
+
+
