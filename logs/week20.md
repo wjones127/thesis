@@ -11,6 +11,16 @@ additive models.
 - How do orals work? Should I be finding people for orals? What should I do to
 prepare?
 
+2 people from math dept: Andrew and Albyn
+
+2 people from elsewhere: Math and Natural Sciences 
+Noel N. from econ, works on city infrastructure
+
+
+Tuesday, May 3, 1pm in Library 389
+
+
+
 - Should I include a time of day variable?
 
 ## A new timeline
@@ -19,7 +29,7 @@ Ideally I could run a iteration of the first models in the next week, so that
 I could write those results up over break. To get those models ready, I need to
 
 - make probability plots minimize MSE or AIC
-- write function for additive model output
+- write function for additive model predictions
 - write specification of each model
 - implement cross validation
 - test formatting of plots
