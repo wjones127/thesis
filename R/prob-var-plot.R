@@ -3,6 +3,8 @@ library(dplyr)
 library(binom)
 library(zoo)
 library(lazyeval)
+library(Rcpp)
+sourceCpp("subset-sorted.cpp")
 
 #' LOESS Plot for Binary Variable
 #'
@@ -25,7 +27,7 @@ library(lazyeval)
 #'
 #' @examples
 #' x <- rnorm(100, 0, 2000)
-#' y <- rbinom(100, 1, invlogit(x/1000))
+#' y <- rbinom(100, 1, 1 / (1 + exp(-x / 1000)))
 #' test_data <- data.frame(x, y)
 #' p <- prob_var_plot(test_data, "x", "y")
 #' p
@@ -33,11 +35,11 @@ library(lazyeval)
 #'
 #' n <- 1e4
 #' x <- rnorm(n, 0, 2000)
-#' y <- rbinom(n, 1, invlogit(x / 1000))
+#' y <- rbinom(n, 1, 1 / (1 + exp(-x / 1000)))
 #' test_data <- data.frame(x, y)
 #' prob_var_plot(test_data, "x", "y")
 
-prob_var_plot <- function(data, x_var, y_var, method="bayes") {
+prob_var_plot <- function(data, x_var, y_var, method="bayes", n = 200) {
 
     in_window <- function(x, width, x_vec) {
       subsetSorted(x_vec, x - width/2, x + width/2)
@@ -51,7 +53,7 @@ prob_var_plot <- function(data, x_var, y_var, method="bayes") {
       }
 
   # Load and filter data =======================================================
-  n <- 1000
+  #n <- 1000
   orig_data <- data %>% select_(x_var, y_var)
   orig_data <- filter(orig_data, complete.cases(orig_data))
   orig_data[[y_var]] <- as.numeric(orig_data[[y_var]])
@@ -110,12 +112,4 @@ prob_var_plot <- function(data, x_var, y_var, method="bayes") {
 }
 
 
-
-
-# Tests
-n <- 1000000
-p <- runif(n, 0, 1)
-y <- rbinom(n, 1, p)
-system.time(log_likelihood(p, y, n))
-system.time(log_likelihood2(p, y, n))
 
