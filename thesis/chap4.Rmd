@@ -1,9 +1,11 @@
 ---
-output: pdf_document
+output: 
+  pdf_document: 
+    keep_tex: yes
 header-includes:
 - \usepackage{graphicx,latexsym}
 - \usepackage{amssymb,amsthm,amsmath}
-- \usepackage{longtable,booktabs,setspace, dsfont}
+- \usepackage{longtable,booktabs,setspace, dsfont, array}
 ---
 
 <!--
@@ -28,7 +30,7 @@ library(lme4)
 ```
 
 
-# Model 1: Rides and Riders
+# Modeling Rides and Riders
 
 Complex statistical models can accurately model intricate processes. But they
 also run the risk of overfitting to data. To avoid this, we build up our models
@@ -44,19 +46,33 @@ approached, because the data transformations for routes were a complex problem.
 In this chapter we focus on building models that incorporate information about
 rider, weather conditions, time of day, and ride length. In brief, our models 
 start with a logistic regression model considering only
-ride-level variables, and formulate more complex models by adding
+ride-level variables, and formulate more complex models by adding various terms.
+`r ref("models", type = "table")` describes each model briefly along with the
+models label.
 
-1. a random intercept for riders,
-2. average ride length as a rider-level predictor,
-3. forth-degree polynomial terms for time of day,
-4. sinusoidal terms for time of day,
-5. a non-parametric smoother for time of day (integrated with rest of model
-using an additive model),
-6. a non-parametric smoother for ride length.
+-----------------------------------------------------------------
+__Model__ __Description__
+--------- -------------------------------------------------------
+Model 1   (Baseline) Classical logistic regression
+
+Model 2   Add rider intercepts
+
+Model 3   Add trignometric terms for time of day
+
+Model 4   Additive model with cubic cyclic spline for time of day
+
+Model 5   Additive model with spline for ride length
+
+Model 6   Remove random rider intercepts from Model 4
+-----------------------------------------------------------------
+Table: List of models we evaluate in this chapter. \label{tab:models}
+
+
+
 
 ## The Models
 
-Our first model, which we will use as the baseline for comparing further models,
+**Model 1**, which we will use as the baseline for comparing further models,
 is a multivariate logistic regression model. Our set of predictors are
 
 - $X^\text{length}$, standardized ride length
@@ -78,7 +94,7 @@ $$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + X_i \beta),$$
 where $\alpha \in \mathbb{R}$ and $\beta \in \mathbb{R}^p$ are parameters to be
 estimated.
 
-```{r, echo=F, results='asis'}
+```{r plot-rider-avgs, echo=F, results='asis'}
 label(path = "figure/rider_avgs.pdf", 
 caption = "The overall rates at which each rider gives a negative rating for a
 ride varies greatly. This is our primary motivation for including rider intercepts
@@ -88,7 +104,8 @@ options = "tbh")
 ```
 
 Riders appear to have different tendencies to rate rides negatively more often,
-as we note in `r ref("rider-avgs")`. To model this, we can add intercepts that vary by rider:
+as we note in `r ref("rider-avgs")`. For **Model 2**, we account for this by 
+adding intercepts that vary by rider:
 
 $$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta).$$
 
@@ -98,51 +115,19 @@ intercepts, $\alpha_j$, by specifying
 
 $$\alpha_j \sim N(0, \sigma^2_\alpha).$$
 
-<!--Being able to account for different intercepts for each rider can add some more
-flexibility to the model, but there is one potential problem: If the intercept
-is correlated with other predictors, this can induce some bias in our estimate
-of the intercepts.^[@bafumi2006] Rider intercepts are likely very correlated with
-other general patterns for riders such as ride length and route. Riders who are
-primarily commuters and riders who are primarily pleasure cyclists have very 
-different typical ride lengths, and thus the effect of their ride lengths might
-show up in the intercept. A quick solution to this problem is to add the average
-of correlated varaibles as a group predictor. -->
-
-We may also want to explore adding a rider-level predictor. Average length of
-ride could help differentiate possible types of riders: commuting cyclists will
-generally have shorter rides than atheletic cyclists. To incorporate this, we 
-specify $\alpha_j$ as
-
-$$\alpha_j \sim N(\gamma_0 + u_j \gamma, \sigma^2_\alpha),$$
-
-where,
-
-- $u_j$ is the average ride length for rider $j$,
-- $\gamma_0, \gamma, \sigma^2_\alpha \in \mathbb{R}$ are the parameters to be
-estimated.
-
-Now we can also address time of day as a predictor. We use time of day to
+Starting with **Model 3**, we address time of day as a predictor. We use time of day to
 account for the various daily trends that may affect ratings, including as a
 simple way to model the overall traffic level, which is difficult to model on
 it's own. These patterns
-are cyclic and very non-linear, which makes them difficult to model easily. If
-we ignore the cyclic pattern, we can use a fourth degree polynomial. So, if
-we have the variable $t_i$ as the time of day for the $i$th ride, our model
-becomes
-
-$$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta 
-+ \beta^{t1} t + \beta^{t2} t^2 + \beta^{t3} t^3 + \beta^{t4} t^4).$$
-
-There will necessarily be a discontinuity at midnight in the daily cycle, but
-since there are few rides at that time, such a model may perform just fine.
-However, we can use a similarly flexible parametric approach that does have a
-cyclic constraint: adding sinusoidal terms with a period of one day.
+are cyclic and very non-linear, which means we have to be a little more creative
+in how we incorporate them into our model.
+One approach is to add sinusoidal terms with a period of one day.
  We would be interested in fitting a term,
 
 $$A \sin (T x^{\text{time}} + \phi),$$
 
 where $\beta$ and $\phi$ are coefficients estimated and $T = 2 \pi / d,$ where
-$d$ is the period of one day ($8.64 \times 10^7$ milliseconds.) This form isn't
+$d$ is the period of one day (24 hours.) This form isn't
 easy to estimate, but we can transform this expression into the sum of two
 trigonometric functions:
 
@@ -155,18 +140,29 @@ A \left( \sin (T x) \cos (\phi) + \cos (T x) \sin (\phi) \right)\\
 
 where $\beta_1 = A + \cos (\phi)$ and $\beta_2 = \sin (\phi).$ To add a little
 more flexibility, we can also add another sinusoidal term with half the period.
-This would make our model,
 
-$$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta 
-+ \beta^{t1} \sin(T \cdot t) + \beta^{t2} \cos (T \cdot t)
-+ \beta^{t3} \sin(T/2 \cdot t) + \beta^{t4} \cos (T/2 \cdot t)).$$
+We also want to take into account that weekday patterns may be different than
+weekend hourly patterns. So we also have a variable $X^\text{weekend}$ that
+serves as a weekend indicator, which will interact with the time terms. So
+if $t$ is the time of day, then Model 3 would be
 
-We can also abandon parametric methods and use a cyclic non-parametric smoother
-to model time. The only problem is that we need a way to combine our parametric
+\begin{equation}
+\begin{split}
+\mathbb{P} (Y_i=1) = \text{logit}^{-1} (&\alpha + \alpha_{j[i]} + X_i \beta \\
+&+ X^\text{weekend} \cdot [\beta^{t1} \sin(T \cdot t) + \beta^{t2} \cos (T \cdot t)\\
+&+ \beta^{t3} \sin(T/2 \cdot t) + \beta^{t4} \cos (T/2 \cdot t)]\\
+&+ (1 - X^\text{weekend}) \cdot [\beta^{t1} \sin(T \cdot t) + \beta^{t2} \cos (T \cdot t)\\
+&+ \beta^{t3} \sin(T/2 \cdot t) + \beta^{t4} \cos (T/2 \cdot t))].
+\end{split}
+\end{equation}
+
+For **Model 4** and **Model 5**, we abandon parametric methods and use a 
+cyclic non-parametric smoother to model time of day. 
+The only problem is that we need a way to combine our parametric
 and multilevel parts of the model with a new non-parametric part. This is
-where additive models come in. <!-- add more about non-parametric models. -->
+where additive models come in.
 
-```{r, echo=F, results="asis"}
+```{r plot-length-hour, echo=F, results="asis", eval=FALSE}
 label(path = "figure/length_prob_plot.pdf", 
 caption = "Approximate probability of stresfful rating by length. Probabilities
 as Binomial probability estimates, with exact confidence intervals, for a sliding
@@ -183,55 +179,326 @@ options = "tbh")
 ```
 
 
+## Additive Models and Smoothing Splines
+
+We want to explore using non-parametric methods to model the relationship with
+time and length, but we wish to keep the other parts of our model the same. We
+can do this with an additive model. Additive models assume that the response
+is the sum of functions of each of the predictors:
+
+$$\text{logit} (\mathbb{P}(y_i = 1)) =
+\alpha + \sum_{j = 1}^p f_j(x_{ij}).$$
+
+These functions can be linear, so linear regression is a subset of additive models.
+More interestingly, these functions can be non-parametric. The Backfitting 
+algorithm was designed to fit additive models.^[@cosmaadditive]
+
+Smoothing splines are essentially cubic functions stiched together at points
+called ``knots'' such that the full piecewise function is continuous and has
+continuous first and second derivative. One can further define cyclic cubic
+splines, which simply have the constraint that the last knot and first knot
+are treated as the same, thus allowing a continuous cyclic function to be fit.
+^[For a brief and entertaining introduction to smoothing splines, see 
+@cosmasplines. For a more in-depth look at splines, check out @wood2006]
+
+Computation of multilevel additive models with splines is availible in the
+`gamm4` package, which we use to fit the two following models.
+
+**Model 4** will introduce a cyclic cubic splines for time of day. 
+
+
+
 ## Model Evaluation
+
+To fit the data, we got all of the rider in Portland from [insert data here] to
+[insert date here] that occured in Portland, OR, for riders that had over 20 rides
+in Portland, OR. There were 35,370
+rides, 14,032 of which were given a rating. Overall 10.88\%
+percent of these rides were given a negative rating. There were 518 
+riders in the data set (each with more than 20 rides.)
+
+All six models were fit twice: first to the full data set to get good estimates
+of the parameters, and second to a sample of 80 percent of the rides, so that
+predictive accuracy for out-of-sample observations could be determined. (The
+sample had to be stratified by rider, to guarentee that every rider had at 
+least on ride in the training set; otherwise the model would have no fit
+intercept to make predictions.)
+
+The separation plots in `r ref("sep-plots-model1")` give a clear initial picture
+of how these model fits compare.  Model 1 performs very poorly compared to those
+that include rider intercepts, assigning mostly the same probability to all observations. 
+Models that include the rider intercept all seem to perform similarly.
+The log likelihoods and AIC scores (shown in `r ref("modelfits", type = "table")`)
+corroborate this. Naturally, this poses the question: Are the other variables
+simply far less important in predicting rider ratings or do rider intercepts
+encode more information that simply a rider general tendency to give a
+negative rating? We will return to this question shortly.
+
+
+\begin{table}[htb]
+\centering
+\caption{Model fit sumarries for full fittings.\label{tab:modelfits}}
+\begin{tabular}{lm{4in}rr}
+\toprule
+\textbf{Model} & \textbf{Separation Plot} & $\mathcal{L}$ & \textbf{AIC}\\
+\midrule
+Model 1 & \includegraphics{figure/model1-sep.pdf}
+& -4,788 & 9,589\\
+Model 2 & \includegraphics{figure/model2-sep.pdf}
+& -3,971 & 7,956\\
+Model 3 & \includegraphics{figure/model3-sep.pdf}
+& -3,923 & 7,876\\
+Model 4 & \includegraphics{figure/model4-sep.pdf}
+& -3,931 & 7,879\\
+Model 5 & \includegraphics{figure/model5-sep.pdf}
+& -3,928 & 7,877\\
+Model 6 & \includegraphics{figure/model6-sep.pdf}
+& -4,716 & 9,458\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+```{r separation-plots, echo=F, results='asis', eval=FALSE}
+label(path = "figure/sep_plots.pdf", 
+caption = "Separation plots for models for data, with models fit to the full sample.", 
+      label = "sep-plots-model1", type = "figure", scale=1,
+options = "tbh")
+#label(path = "figure/sep_plots_out_of_sample.pdf", 
+#caption = "Separation plots for each model, for out of sample data. Models were
+#fit to a training set of size [insert size here] and then predictions were made for the #testing
+#set of size [insert size here].", 
+#      label = "sep-plots-oos", type = "figure", scale=1,
+#options = "tbh")
+```
+
+
+An important question to ask about the gains from the rider intercept is: how 
+much of that gain could have been achieved with randomly chosen groups? Obviously,
+if we split the observations into groups, each group will have a slightly different
+rate of negative rating even if the groups are randomly chosen. We can test this,
+by running a new model where instead of splitting the observations by rider, we
+randomly assign the rides a rider. `r ref("sep-plots-intercept-test")` shows that
+after testing it is clear that the gains are not random.
+
+```{r intercept-test, echo=F, results='asis'}
+label(path = "figure/intercept_test_plot.pdf", 
+caption = "Separation plots for models 2 compared to a similar model where
+riders are randomly assigned to rides.", 
+      label = "sep-plots-intercept-test", type = "figure", scale=1,
+options = "tbh")
+```
+
+<!--
+Though the ability of the later models to separate the observations is about the
+same, their fit to the data does vary a little. We can see this in the predicted
+probability versus fitted probability plot in `r ref("prob-eval-plots")` and
+`r ref("prob-eval-plots-oos")`.
+-->
+```{r prob-eval-plots, echo=F, results='asis', eval=FALSE}
+label(path = "figure/prob_eval_plots.pdf", 
+caption = "Approximate probability of stresfful rating by time of day. Probabilities
+as Binomial probability estimates, with exact confidence intervals, for a sliding
+window.", 
+      label = "prob-eval-plots", type = "figure", scale=1,
+options = "tbh")
+
+label(path = "figure/eval_plot_out_of_sample.pdf", 
+caption = "Approximate probability of stresfful rating by time of day. Probabilities
+as Binomial probability estimates, with exact confidence intervals, for a sliding
+window.", 
+      label = "prob-eval-plots", type = "figure", scale=1,
+options = "tbh")
+```
+
+
+
+
+
+```{r rider-intercepts, echo=F, results='asis', eval = FALSE}
+label(path = "figure/rider_intercept_plot.pdf", 
+caption = "Approximate probability of stresfful rating by time of day. Probabilities
+as Binomial probability estimates, with exact confidence intervals, for a sliding
+window.", 
+      label = "rider-intercept-plot", type = "figure", scale=1,
+options = "tbh")
+```
+
+
+
+## Model Results
+
+
+
+
+\begin{table}[htb]
+\centering
+\def\arraystretch{1.3}
+\caption{Regression coefficients for Model 1, Model 2, Model 4, and Model 6. 
+95\% confidence intervals are given in parentheses.\label{tab:modelcoef}}
+\begin{tabular}{lllll}
+\toprule
+ Regression Term &  Model 1 &  Model 2 &  Model 4 & Model 6\\
+\midrule
+Log(length) & -0.122 & -0.100 & -0.092 & -0.114\\
+& \footnotesize (-0.180, -0.063) & \footnotesize (-0.168, -0.033) & 
+\footnotesize (-0.163, -0.022) & \footnotesize (-0.174, -0.054)\\
+Mean Temp. & 0.042 &  0.071 & 0.071 & 0.059\\
+& \footnotesize (-0.0014, 0.098) & \footnotesize (0.001, 0.141) & 
+\footnotesize (0.000, 0.142)  & \footnotesize (0.002, 0.115)\\
+Gust speed & 0.007 & 0.006 & 0.005 & 0.007\\
+& \footnotesize (-0.0003, 0.014) & \footnotesize (-0.002, 0.013) & 
+\footnotesize (-0.003, 0.013) & \footnotesize (-0.019, 0.027)\\
+Rainfall & 0.008 & 0.012 & 0.008 & 0.004\\
+& \footnotesize (-0.015, 0.031) & \footnotesize (-0.015, 0.038) & 
+\footnotesize (-0.019, 0.035) & \footnotesize (-0.019, 0.027)\\
+Rainfall 4-Hour & 0.014 & 0.016 & 0.017 & 0.015\\
+& \footnotesize (0.006, 0.022) & \footnotesize (0.007, 0.025) &
+\footnotesize (0.008, 0.027) & \footnotesize (0.007, 0.023)\\
+Intercept & -2.284 & -3.081 & -3.133 & -2.328\\
+& \footnotesize (-2.443, -2.125) & \footnotesize (-3.392, -2.770) &
+\footnotesize (-3.441, -2.824) & \footnotesize (-2.489, -2.168)\\ 
+\bottomrule
+\end{tabular}
+\end{table}
+
+The results of the models are shown in `r ref("modelcoef", type = "table")`. 
+The strongest effects come from length and weekend: longer rides and rides on
+weekends are much less likely to be given a negative rating. Mean temperature
+and 4-hour cumulative rainfall both have small positive effects on the probability
+of negative rating, while gust speed and rainfall have little to no effect. 
+
+```{r time-fits, echo=F, results='asis'}
+label(path = "figure/time_fit_plot.pdf", 
+caption = "Predicted probabilities of a negative rating by time for a typical ride.
+The rider was chosen so the intercept was closest to the mean intercept for model
+6. The median length and average mean temperature were used, and all other
+predictors were set to zero.", 
+      label = "model1-time-fit", type = "figure", scale=1,
+options = "tbh")
+```
+
+If we look at the marginal fits for time of day in `r ref("model1-time-fit")`,
+they are overall predictible. On weekdays, there are peaks in the morning and
+evening corresponding with rush hour traffic, and the trends on the weekends are
+much flatter. The fit for Model 3, which was made with four sinusoidal terms,
+is slightly different from Model 4 and Model 5, which were made with cyclic
+cubic splines. There are two probable reasons for this difference: first, the 
+sinusoidal terms have far less flexibility in the type of curves that can be
+formed than the splines; second, the splines, because they are a non-parametric
+method, penalize complexity of the fit while the parametric sinusoidal form 
+does not, making the splines more likely to be conservative with the fit and
+fit a flat line rather than a subtle pattern. The former explains most of the
+differences for the weekday fits while the latter explains most of the
+differences in the weekend fits.
+
+The most interesting result from these models, however, is that the rider
+intercepts encode a lot of information about the times of a typical riders rides.
+Notice that in `r ref("model1-time-fit")`, the scale at which the Model 6 time
+fitted probabilities vary is much larger than the scale at which the other
+models' predictions vary. (The differences is so large we had to show them in
+separate plots!) Without allowing for varying rider intecepts, the time terms
+take on a lot more significant role. Interestingly, according to the separation
+plots in `r ref("modelfits", type = "table")` the time term has nowhere near 
+the amount of information that the rider intercepts seem to encode. 
+
+A clearer picture of what is going on is painted in `r ref("time-pred-plot")`.
+Model 1, which has a fixed intercept and no time dependence, has predictions
+that vary very little by time. The models with random intercepts (2--5) show 
+very strong temporal patterns, with very concentrated spikes in the morning
+and evening. Model 6, which had the time of day spline but a fixed intercept,
+has a small temporal pattern, but does not represent the same degree of varying
+probabilities by time of day. 
+
+```{r time-predictions, echo=F, results='asis'}
+label(path = "figure/time_pred_plot.pdf", 
+caption = "Each of the models predictions for all rides with time of day on the x-axis.
+Notice how starting with model 2, daily trends start to emerge. This indicates that the
+rider intercepts are picking up on time of day trends, which must be reflectedd in riders
+typical ride.", 
+      label = "time-pred-plot", type = "figure", scale=1,
+options = "tbh")
+```
+
+```{r rider-predictions, echo=F, results='asis'}
+label(path = "figure/rider_predictions.pdf", 
+caption = "Predicted probability of a negative rating for a typical ride for 
+each rider, for Model 2 and Model 4. The typical ride is a ride at noon on a 
+weekday with median length, mean temperature, and other variables at zero.", 
+      label = "rider-pred", type = "figure", scale=1,
+options = "tbh")
+```
+
+<!--
+## Is it a problem that group intercepts correlate with predictors?
+-->
 
 ```{r, eval=FALSE, echo=FALSE}
 logistic <- function(x) { 1 / (1 + exp(-x)) }
-n_obs <- 100
-groups_intercepts <- rnorm(5, 0, 1)
-corr_simulation <- data.frame(x = rnorm(n_obs, 10, 10),
-                              group = sample(1:5, n_obs, replace=TRUE)) %>%
-  mutate(p = logistic(-16 + 1.4 * x + groups_intercepts[group]),
+n_obs <- 1e4
+n_groups <- 5
+groups_intercepts <- rnorm(n_groups, 0, 1)
+group_mu_x <- rnorm(n_groups, 0, 1.5)
+corr_simulation <- data.frame(group = sample(1:n_groups, n_obs, replace=TRUE)) %>%
+  mutate(x = rnorm(n_obs, group_mu_x[group], 2),
+         p = logistic(-0.3 + 1.4 * x + groups_intercepts[group]),
          y = rbinom(n_obs, 1, p))
+
+mean_lengths <- corr_simulation %>%
+  group_by(group) %>%
+  summarise(mean_x = mean(x))
+
+mean_lengths$mean_x
+group_mu_x
+# These are accurate enough estimates
+
+
+qplot(x = corr_simulation$p)
 
 naive_model <- glm(y ~ x, data = corr_simulation, family=binomial)
 ml_model <- glmer(y ~ 1 + x + (1|group), data = corr_simulation, family=binomial)
 summary(naive_model)
 summary(ml_model)
 coef(ml_model)$group$`(Intercept)`
-groups_intercepts -16
+groups_intercepts - 0.3
 
 
 generate_data <- function(n_obs = 1000) {
-    rider_avg_x <- rnorm(5, 1, 2)
-  corr_simulation <- data.frame(group = sample(1:5, n_obs, replace=TRUE)) %>%
-    mutate(x = rnorm(n_obs, rider_avg_x[group], .1),
-           p = logistic(-3 + .05 * x + groups_intercepts[group]),
+  corr_simulation <- data.frame(group = sample(1:n_groups, n_obs, replace=TRUE)) %>%
+    mutate(x = rnorm(n_obs, group_mu_x[group], 2),
+           p = logistic(-0.3 + 1.4 * x + groups_intercepts[group]),
            y = rbinom(n_obs, 1, p))
+  
   corr_simulation
 }
 
-hist(corr_simulation$p)
 
 fit_naive <- function(df) {
   model <- glmer(y ~ 1 + x + (1|group), data = df, family=binomial)
-  return(fixef(model)[["(Intercept)"]])
+  return(coef(model)$group[["(Intercept)"]][1])
 }
 fit_smart <- function(df) {
     # Add mean length data
     mean_lengths <- df %>%
-    group_by(group) %>%
-    summarise(mean_x = mean(x))
+      group_by(group) %>%
+      summarise(mean_x = mean(x)) %>%
+      arrange(desc(group))
     new_df <- left_join(df, mean_lengths, by="group")
   
     model <- glmer(y ~ 1 + mean_x + x + (1|group), data = new_df, family=binomial)
-    return(fixef(model)[["(Intercept)"]])
+    
+    intercept <- coef(model)$group[["(Intercept)"]][1]
+    slope <- coef(model)$group[["mean_x"]][1]
+    full_intercept <- intercept + mean_lengths$mean_x[1] * slope
+    return(full_intercept)
 }
 
-model_test <- data.frame(iter = 1:1000,
-                         intercept_naive = numeric(1000),
-                         intercept_smart = numeric(1000))
-for (i in 1:1000) {
+n_bootstrap <- 50
+
+model_test <- data.frame(iter = 1:n_bootstrap,
+                         intercept_naive = numeric(n_bootstrap),
+                         intercept_smart = numeric(n_bootstrap))
+for (i in 1:n_bootstrap) {
 data <- generate_data()
 model_test$intercept_naive[i] <- fit_naive(data)
 model_test$intercept_smart[i] <- fit_smart(data)
@@ -239,7 +506,6 @@ model_test$intercept_smart[i] <- fit_smart(data)
 ggplot(model_test) + 
   geom_histogram(fill="red", alpha=0.5, aes(x = intercept_naive)) + 
   geom_histogram(fill="blue", alpha=0.5, aes(x = intercept_smart)) + 
-  geom_vline(xintercept=0.1 + mean(groups_intercepts))
+  geom_vline(xintercept= groups_intercepts[1] - 0.3)
 ```
-
 
