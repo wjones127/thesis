@@ -25,4 +25,35 @@ library(reedtemplates)
 ```
 
 
-# Comparative Evaluation
+# Unfinished Work: Incorporating Routes
+
+These models so far do not incorporate route. Unfortunately, I was not able to
+get to models that actually do. The data transformations necessary were more than
+I could reasonably do in addition to the other parts of developing the models. So
+I leave the models as they are, but here I explain some of my work toward the
+goal of incorporating routes and describe some potential modeling approaches.
+
+## Regression Terms for Road Segments
+
+Now we have the task of incorporating our knowledge of riders' routes into our
+regression. Our approach here will be to consider routes as sequences of
+discrete road segments, each of which have known properties. This is convenient
+because we have such data about roads that give us bike lanes, road size, etc.
+It is even possible for us to calculate popularity of particular segments easily.
+
+Assume we have $K$ total road segments in our road network and for each ride we
+have $\Omega_i \subseteq \{1, \ldots, K\}$, the set of road segments that are in
+the route of ride $i$. Let $l_k$ be the length of the $k$th segment and define
+the length of ride $i$ to be:
+
+$$ L_i = \sum_{k \in \Omega_i} l_k.$$
+
+For the $k$th road segment, define the m-dimensional vector
+$W_k = W_k^1, W_k^2, \ldots, W_k^m$ road segment-level predictors.
+Then we shall define the term in our regression for the route of ride $i$ as
+
+$$ R_i = \frac{1}{L_i} \sum_{k \in \Omega_i} l_k W_k \beta^{\text{road}},$$
+
+Where $\beta^{\text{road}}$ is a vector of coefficients for the road segment
+level predictors. When actually computing this value, it may be convenient to 
+factor out the $\beta^{\text{road}}$
