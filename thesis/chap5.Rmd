@@ -25,33 +25,386 @@ library(reedtemplates)
 ```
 
 
-# Model 2: Regression Terms for Road Segments
+# Modeling Missing Response
 
-Now we have the task of incorporating our knowledge of riders' routes into our
-regression. Our approach here will be to consider routes as sequences of
-discrete road segments, each of which have known properties. This is convenient
-because we have such data about roads that give us bike lanes, road size, etc.
-It is even possible for us to calculate popularity of particular segments easily.
+We have a significant portion of observations with no response. But we do have
+all the predictors for every observation. So just as we built a model to predict
+the rating, can we build a model to predict whether a rider will give a rating?
+Going further, could we combine our rating model and nonresponse model into one
+model, such that our predictions for ratings will take into account biases in
+nonresponse?
 
-Assume we have $K$ total road segments in our road network and for each ride we
-have $\Omega_i \subseteq \{1, \ldots, K\}$, the set of road segments that are in
-the route of ride $i$. Let $l_k$ be the length of the $k$th segment and define
-the length of ride $i$ to be:
-
-$$ L_i = \sum_{k \in \Omega_i} l_k.$$
-
-For the $k$th road segment, define the m-dimensional vector
-$W_k = W_k^1, W_k^2, \ldots, W_k^m$ road segment-level predictors.
-Then we shall define the term in our regression for the route of ride $i$ as
-
-$$ R_i = \frac{1}{L_i} \sum_{k \in \Omega_i} l_k W_k \beta^{\text{road}},$$
-
-Where $\beta^{\text{road}}$ is a vector of coefficients for the road segment
-level predictors. When actually computing this value, it may be convenient to 
-factor out the $\beta^{\text{road}}$
+We attempt to address these two questions in this chapter. The reader should be
+warned, however, that this exploration is cursory. While modeling nonresponse is
+important in understanding the data it is not our main goal here. That being
+said, a more in-depth exploration of nonreponse in the Ride Report app would be
+worthwhile.
 
 
-## Choosing Segment-Level Parameters
+
+## What could possibly go wrong?
+
+Let look at a toy example. Let,
+$$X \sim \text{Normal}(0,1),$$
+$$Y \sim \text{Binomial}(\text{logit}^{-1} (4X)),$$
+$$R \sim \text{Binomial}(0.3 + 0.8 Y).$$
+
+Now, let $Y_i$ be $NA$ (a missing value) if and only if $R_i = 1$.
+
+```{r load-packages, echo=FALSE, message=FALSE, results='hide'}
+packages <- c("dplyr", "ggplot2", "extrafont", "gridExtra", "lme4")
+sapply(packages, library, character.only = TRUE)
+```
 
 
-## Evaluating Segment-Level Models
+```{r, results='hide', echo = FALSE, cache = TRUE, warning=FALSE}
+invlogit <- function (x) 1 / (1 + exp(-x)) 
+
+n <- 1e4
+x <- rnorm(n, 0, 1)
+y <- rbinom(n, 1, prob = invlogit(4 * x))
+psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.8 * y))
+df <- data.frame(x, y, psi) %>%
+  mutate(y_obs = ifelse(psi == 1, NA, y))
+
+actual_model <- glm(y ~ x, data = df, family = binomial)
+actual_intercept <- coef(actual_model)[1]
+actual_slope <- coef(actual_model)[2]
+
+estimate_slope <- function() {
+  psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.1 * df$y))
+  df$y_obs <- ifelse(psi == 1, NA, df$y)
+  model <- glm(y_obs ~ x, data = df, family = binomial)
+  coef(model)[2]
+}
+
+slopes <- replicate(1000, estimate_slope())
+p1 <- qplot(x = slopes) + 
+  geom_vline(xintercept = 4, linetype = "dashed") + 
+    annotate(geom = "label", y = 75, x = 4.00, label = "Actual Slope") +
+  theme_bw(base_family="CMU Serif")
+
+estimate_intercept <- function() {
+  psi <- rbinom(n, 1, prob = invlogit(0.3 - 0.1 * df$y))
+  df$y_obs <- ifelse(psi == 1, NA, df$y)
+  model <- glm(y_obs ~ x, data = df, family = binomial)
+  coef(model)[1]
+}
+
+intercepts <- replicate(1000, estimate_intercept())
+p2 <- qplot(x = intercepts, bins = 30) + 
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  annotate(geom = "label", y = 75, x = 0.01, label = "Actual Intercept") +
+  theme_bw(base_family="CMU Serif")
+
+missing_model1_estimates <- arrangeGrob(p1, p2, nrow=1)
+
+ggsave('figure/missing_model1_estimates.pdf', missing_model1_estimates, width=6, height=2.25)
+```
+
+```{r, echo=F, results='asis'}
+label(path = "figure/missing_model1_estimates.pdf", 
+caption = "Missing response when missingness is correlated with the response
+leads to biased estimates in the complete case model of the intercept, but
+not the slopes. Here, we bootstrapped estimates of the slope and intercept
+with each bootstrapped dataset a different pattern of missing data for the same
+original full data.", 
+label = "missing-model1-estimates", type = "figure", scale=1,
+options = "tbh")
+```
+
+
+## Using Expectation Maximization
+
+We can try to perform the expectation maximization algorithm here, using the
+weighting method proposed by Ibrahim and Lipsitz^[@ibrahim1996]. Let 
+$y_i$ be our binary response and $x_i$ be our predictors. With these we have
+our complete data logistic regression model $f(y_i \;|\; x_i, \beta)$, where
+$\beta$ is a vector of parameters in the complete data model. Now define
+
+\begin{equation}
+r_i = \left\{ \begin{array}{ll}
+1, & \text{if } y_i \text{is missing};\\
+0, & \text{if } y_i \text{is observed};
+\end{array}
+\right.
+\end{equation}
+
+for $i = 1, \ldots, n$. We then specify a logistic regression model for missingness
+(the $r_i$'s): $f(r_i \;|\; x_i, y_i, \alpha)$, where $\alpha$ is the vector of
+parameters in the missingness model.
+
+We begin the algorithm by getting our first estimates of $\alpha$ and $\beta$.
+We obtain $\beta^{(1)}$ by estimating $\beta$ with only the non-missing data.
+We can then estimate the $y_i$ for the missing data using $\beta^{(1)}$, and
+then use those estimates to compute $\alpha^{(1)}$.
+
+For the E-step, we compute weights for each observation with missing response
+
+\begin{equation}
+w_{i\: y_i, (t)} = 
+f(y_i \;|\; r_i, x_i, \alpha^{(t)}, \beta^{(t)}) =
+\frac{f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})}{
+\sum_{y_i = 0}^1
+f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})
+}.
+\end{equation}
+
+(For observed responses, $w_{i\: y_i, (t)} = 1$.) We can compute
+$f(y_i \;|\; x_i, \beta^{(t)})$ and $f(r_i \;|\; x_i, y_i, \alpha^{(t)})$ by 
+making use of predictions from regression models. So in \textit{R}, we can
+fit models and use the `predict()` function to get our probabilities from
+each of these models.
+
+For the M-step, we find our next estimates of the parameters, $\alpha^{(t + 1)}$
+and $\beta^{(t + 1)}$, by maximizing
+
+\begin{equation}
+Q(\alpha, \beta \;|\; \alpha^{(t)}, \beta^{(t)}) =
+\sum_{i = 1}^n \sum_{y_i = 0}^{m_i} w_{iy_i, (t)} 
+l(\alpha, \beta; x_i, y_i, r_i).
+\end{equation}
+
+We do this by first by estimating $\beta^{(t + 1)}$ using weighted maximum
+likelihood for the complete data model, and then estimating $\alpha^{(t + 1)}$
+using the same method. The nice things here is we can simply make use of `glm`
+in \textit{R} to do these computations. In order to create the data to fit these
+models, we create an augmented data set where for each observation missing the
+response, we record as two rows for the two possible values and add a column for
+weight.
+
+\begin{figure}[htb]
+\centering
+\caption{Creation of augmented data set for the weighted method of the EM algorithm for missing response data. \label{fig:augmented-data}}
+\begin{tabular}{lcl}
+\toprule
+\textbf{Original Data} &  & \textbf{Augmented Data}\\
+\midrule
+
+\begin{tabular}{lll}
+$y_i$ & $x_i$ & $r_i$\\
+\midrule
+1 & 2.4 & 0\\
+0 & 1.3 & 0\\
+NA & -0.4 & 0\\
+& &
+\end{tabular}
+&
+$\to$
+&
+\begin{tabular}{llll}
+$y_i$ & $x_i$ & $r_i$ & $w_i$\\
+\midrule
+1 & 2.4 & 0 & 1\\
+0 & 1.3 & 0 & 1\\
+1 & -0.4 & 0 & 0.2\\
+0 & -0.4 & 0 & 0.8
+\end{tabular}\\
+\bottomrule
+\end{tabular}
+\end{figure}
+
+We repeat the E and M step until the values of $\alpha$ and $\beta$ converge.
+
+As an example, we simulated a dataset from the same model we presented earlier
+of size $10^5$. As shown in `r ref("EM-sim", type = "table")`, the estimate for
+the intercept in the model that only considers the complete data is way off, but
+the model resulting from the EM algorithm is just as accurate as the model 
+computed fit to the full data (with missing values filled in from the original
+data model.) 
+
+
+```{r, eval=FALSE, echo = FALSE, cache = TRUE, eval = FALSE}
+# Get initial estimates of parameters
+model_y <- gam(y_obs ~ x, data = df, family=binomial)
+df$pred_y <- predict(model_y, newdata = df, type="response")
+model_r <- gam(psi ~ pred_y + x, data = df, family = binomial)
+
+summary(model_y)
+
+# Setup data frames
+df_complete <- df %>%
+  tbl_df() %>%
+  filter(!is.na(y_obs)) %>%
+  mutate(weight = 1)
+df_missing <- df %>%
+  tbl_df() %>%
+  filter(is.na(y_obs)) %>%
+  mutate(weight = NA)
+
+for (i in 1:50) {
+  print(model_y$aic)
+  # get prob of 1
+  pred_y <- predict(model_y, newdata = df_missing, type="response")
+  
+  # get prob missing given y
+  pred_r_y1 <- predict(model_r, 
+                       newdata = mutate(df_missing, pred_y = 1), 
+                       type="response")
+  pred_r_y0 <- predict(model_r, 
+                       newdata = mutate(df_missing, pred_y = 0),
+                       type="response")
+  
+  # Make weights
+  denom <- (pred_y * pred_r_y1) + ((1-pred_y) * pred_r_y0)
+  w_y1 <- pred_y * pred_r_y1 / denom
+  w_y2 <- (1-pred_y) * pred_r_y0 / denom
+  
+ # print(pred)
+  df_augmented <- bind_rows(df_complete,
+                        mutate(df_missing,
+                               weight = w_y1, 
+                               y_obs = 1),
+                        mutate(df_missing,
+                               weight = w_y2,
+                               y_obs = 0))
+  model_y <- gam(y_obs ~ x, data = df_augmented, family = binomial,
+               weights = df_augmented$weight)
+  model_r <- gam(psi ~ pred_y + x, data = df_augmented, family = binomial,
+                 weights = df_augmented$weight)
+}
+summary(model_y)
+summary(model_r)
+
+sum((pred_y > 0.5) != df_missing$y)
+```
+
+
+\begin{table}[htb]
+\caption{Coefficients for models fit to simulated data set ($\pm$ twice the
+standard error.) \label{tab:EM-sim}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Model & $\hat{\beta}_0$ & $2 \cdot SE_{\hat{\beta}_0}$  & 
+$\hat{\beta}_X$ &  $2 \cdot SE_{\hat{\beta}_X}$\\
+\midrule
+Actual & 0 & --- & 4 & ---\\
+Full Data Model & $0.030$ &  $0.021$ & $4.009$ &  $0.052$\\
+Complete Data Model & $-0.543$ & $0.038$ & $4.047$ &  $0.093$\\
+EM Final Model & $-0.017$ & $0.021$ & $4.059$ &  $0.053$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+Let's extend this model a little bit. Let
+$$X_1 \sim \text{Normal}(0,1), \quad X_2 \sim \text{Normal}{1, 2},$$
+$$Y \sim \text{Binomial}(\text{logit}^{-1} (0.4 X_1 + 0.3 X_2)),$$
+$$\psi \sim \text{Binomial}(0.3 + 0.1 Y + 0.2X_2).$$
+
+
+```{r, results='hide', eval=F, echo = FALSE}
+x1 <- rnorm(n, 0, 1)
+x2 <- rnorm(n, 1, 2)
+y <- rbinom(n, 1, prob = invlogit(0.4 * x1 + 0.3 * x2))
+psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.1 * y + 0.2 * x2))
+df <- data.frame(x1, x2, y, psi) %>%
+  mutate(y_obs = ifelse(psi == 1, NA, y))
+
+actual_model <- glm(y ~ x1 + x2, data = df, family = binomial)
+actual_slope <- coef(actual_model)[2]
+
+estimate_slope <- function() {
+  psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.1 * df$y + 0.5 * df$x2))
+  df$y_obs <- ifelse(psi == 1, NA, df$y)
+  model <- glm(y_obs ~ x1 + x2, data = df, family = binomial)
+  coef(model)[2]
+}
+
+slopes <- replicate(1000, estimate_slope())
+qplot(x = slopes) + geom_vline(xintercept = actual_slope, color = 'steelblue') + 
+  geom_vline(xintercept = mean(slopes), color = 'forestgreen') + 
+  theme_bw(base_family="CMU Serif")
+
+estimate_intercept <- function() {
+  psi <- rbinom(n, 1, prob = invlogit(0.3 - 0.1 * df$y))
+  df$y_obs <- ifelse(psi == 1, NA, df$y)
+  model <- glm(y_obs ~ x, data = df, family = binomial)
+  coef(model)[1]
+}
+
+intercepts <- replicate(1000, estimate_intercept())
+qplot(x = intercepts) + geom_vline(xintercept = 0, color = 'steelblue') + 
+  geom_vline(xintercept = mean(intercepts), color = 'forestgreen') + 
+  theme_bw(base_family="CMU Serif")
+```
+
+
+Okay, so the intercepts are biased. But for such a subjective measure like rider
+rating, why should we care if this is biased? Well what about the rider intercepts?
+Are their estimates biased in a wierd way? Let's try a random intercept model.
+
+
+```{r, eval=F, echo=FALSE}
+m <- 20
+groups <- 1:m
+x <- rnorm(n, 2, 2)
+group <- sample(groups, n, replace=TRUE)
+alpha <- rnorm(m, -2, 0.4)
+y <- rbinom(n, 1, prob = invlogit(alpha[group] + 0.8 * x))
+r <- rbinom(n, 1, prob = invlogit(0.3 + 0.1 * y))
+df <- data.frame(y, x, group, r) %>%
+  mutate(y_obs = ifelse(r == 1, NA, y))
+
+model <- glmer(y_obs ~ (1|group) + x, data = df, family = binomial)
+coef(model)
+
+estimate_intercept <- function() {
+  r <- rbinom(n, 1, prob = invlogit(0.3 - 0.1 * df$y))
+  df$y_obs <- ifelse(r == 1, NA, df$y)
+  model <- glmer(y_obs ~ (1|group) + x, data = df, family = binomial)
+  intercepts <- coef(model)$group[["(Intercept)"]]
+  intercepts[1] - mean(intercepts)
+}
+
+intercepts <- replicate(400, estimate_intercept())
+
+actual_intercept <- alpha[1] + 2
+
+qplot(x = intercepts, bins = 30) + 
+  geom_vline(xintercept = actual_intercept, linetype = "dashed") + 
+  annotate(geom = "label", y = 20, x = actual_intercept, label = "Actual Intercept") +
+  theme_bw(base_family="CMU Serif")
+```
+
+
+
+
+```{r, eval=F, echo = FALSE}
+n <- 1e5
+m <- 20
+groups <- 1:m
+x <- rnorm(n, 2, 2)
+group <- sample(groups, n, replace=TRUE)
+alpha <- rnorm(m, -2, 0.4)
+alpha_r <- rnorm(m, 0, 1.5)
+y <- rbinom(n, 1, prob = invlogit(alpha[group] + 0.8 * x))
+r <- rbinom(n, 1, prob = invlogit(alpha_r[group] + 0.3 + 0.1 * y))
+df <- data.frame(y, x, group, r) %>%
+  mutate(y_obs = ifelse(r == 1, NA, y))
+
+model <- glmer(y_obs ~ (1|group) + x, data = df, family = binomial)
+coef(model)
+
+estimate_intercept <- function() {
+  r <- rbinom(n, 1, prob = invlogit(0.3 - 0.1 * df$y))
+  df$y_obs <- ifelse(r == 1, NA, df$y)
+  model <- glmer(y_obs ~ (1|group) + x, data = df, family = binomial)
+  intercepts <- coef(model)$group[["(Intercept)"]]
+  intercepts[1] - mean(intercepts)
+}
+
+intercepts <- replicate(400, estimate_intercept())
+
+actual_intercept <- alpha[1] + 2
+
+qplot(x = intercepts, bins = 30) + 
+  geom_vline(xintercept = actual_intercept, linetype = "dashed") + 
+  annotate(geom = "label", y = 20, x = actual_intercept, label = "Actual Intercept") +
+  theme_bw(base_family="CMU Serif")
+```
