@@ -35,13 +35,7 @@ library(lme4)
 Complex statistical models can accurately model intricate processes. But they
 also run the risk of overfitting to data. To avoid this, we build up our models
  from simple to complex, comparing the models with cross validation
-to make sure the complexities introduced add real value to the models.
-
-For our first few iterations of our models, we ignore routes and focus on 
-ride and rider-level predictors. We start here, in part, to demonstrate just
-how much of the variance in ride rating can be explained without examining
-routes. Though we also present this first because this was the first piece we
-approached, because the data transformations for routes were a complex problem.
+to make sure the complexities introduced add real value.
 
 In this chapter we focus on building models that incorporate information about
 rider, weather conditions, time of day, and ride length. In brief, our models 
@@ -57,7 +51,7 @@ Model 1   (Baseline) Classical logistic regression
 
 Model 2   Add rider intercepts
 
-Model 3   Add trignometric terms for time of day
+Model 3   Add trigonometric terms for time of day
 
 Model 4   Additive model with cubic cyclic spline for time of day
 
@@ -82,7 +76,7 @@ is a multivariate logistic regression model. Our set of predictors are
 - $X^\text{temp}$, average temperature, in degrees Fahrenheit.
 
 These $p=5$ predictors will be our standard ride-level predictors in this chapter. We
-will denote the vector of these predictors for the $i$th ride as $X_i$:
+will denote the predictor matrix $X$, with each predictor a column of the matrix:
 
 $$X = (X^\text{length} \; X^\text{rain} \; X^\text{rain4h} \; X^\text{gust} \; X^\text{temp}).$$
 
@@ -104,7 +98,8 @@ options = "tbh")
 ```
 
 Riders appear to have different tendencies to rate rides negatively more often,
-as we note in `r ref("rider-avgs")`. For **Model 2**, we account for this by 
+as we note in `r ref("rider-avgs")`. In fact, many riders give zero or nearly zero
+negative ratings. For **Model 2**, we account for this by 
 adding intercepts that vary by rider:
 
 $$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + \alpha_{j[i]} + X_i \beta).$$
@@ -115,7 +110,8 @@ intercepts, $\alpha_j$, by specifying
 
 $$\alpha_j \sim N(0, \sigma^2_\alpha).$$
 
-Starting with **Model 3**, we address time of day as a predictor. We use time of day to
+Starting with **Model 3**, we address time of day, $t \in [0, 24)$ as a predictor.
+(We measure time of day in hours since midnight.) We use time of day to
 account for the various daily trends that may affect ratings, including as a
 simple way to model the overall traffic level, which is difficult to model on
 it's own. These patterns
@@ -124,7 +120,7 @@ in how we incorporate them into our model.
 One approach is to add sinusoidal terms with a period of one day.
  We would be interested in fitting a term,
 
-$$A \sin (T x^{\text{time}} + \phi),$$
+$$\beta \sin (T x^{\text{time}} + \phi),$$
 
 where $\beta$ and $\phi$ are coefficients estimated and $T = 2 \pi / d,$ where
 $d$ is the period of one day (24 hours.) This form isn't
@@ -132,19 +128,19 @@ easy to estimate, but we can transform this expression into the sum of two
 trigonometric functions:
 
 \begin{align*}
-A \sin (T x + \phi) &= 
-A \left( \sin (T x) \cos (\phi) + \cos (T x) \sin (\phi) \right)\\
-&= (A + \cos (\phi)) \sin (T x) + \sin (\phi) \cos (T x)\\
+\beta \sin (T x + \phi) &= 
+\beta \left( \sin (T x) \cos (\phi) + \cos (T x) \sin (\phi) \right)\\
+&= (\beta + \cos (\phi)) \sin (T x) + \sin (\phi) \cos (T x)\\
 &= \beta_1 \sin (T x) + \beta_2 \cos (T x),
 \end{align*}
 
-where $\beta_1 = A + \cos (\phi)$ and $\beta_2 = \sin (\phi).$ To add a little
+where $\beta_1 = \beta + \cos (\phi)$ and $\beta_2 = \sin (\phi).$ To add a little
 more flexibility, we can also add another sinusoidal term with half the period.
 
 We also want to take into account that weekday patterns may be different than
-weekend hourly patterns. So we also have a variable $X^\text{weekend}$ that
-serves as a weekend indicator, which will interact with the time terms. So
-if $t$ is the time of day, then Model 3 would be
+weekend hourly patterns. We also have a variable $X^\text{weekend}$ that
+serves as a weekend indicator. For Model 3, we add two sets of sinusoidal terms:
+one set for weekdays and one for weekends. More explicitly, we define the model,
 
 \begin{equation}
 \begin{split}
@@ -182,26 +178,34 @@ options = "tbh")
 ## Additive Models and Smoothing Splines
 
 We want to explore using non-parametric methods to model the relationship with
-time and length, but we wish to keep the other parts of our model the same. We
+time and length, but we wish to keep the other parts of our model. We
 can do this with an additive model. Additive models assume that the response
 is the sum of functions of each of the predictors:
 
 $$\text{logit} (\mathbb{P}(y_i = 1)) =
 \alpha + \sum_{j = 1}^p f_j(x_{ij}).$$
 
-These functions can be linear, so linear regression is a subset of additive models.
-More interestingly, these functions can be non-parametric. The Backfitting 
-algorithm was designed to fit additive models.^[@cosmaadditive]
+These functions can be linear, so generalized linear regression is a subset of 
+additive models. But more interestingly, these functions can be non-parametric.
+^[How are these models fit? Using
+what's known as the Backfitting Algorithm. We  define the $k$th partial residuals 
+$Y^{(k)} = Y - \left(\alpha \sum_{j \neq k} f_j(x_j)\right)$. (That is, define
+the portion of $Y$ leftover for $f_k(x_k)$ to fit to after the other $f_j$'s have
+had their share.) Then, iteratively fit each of the functions $f_j$ on the
+partial residuals $Y^{(j)}$ until each of the functions converge. For a further
+quick look at additive models, check out Cosma Shalizi's lecture notes
+(@cosmaadditive)]
+One of the most common types of functions fit are smoothing splines.
 
-Smoothing splines are essentially cubic functions stiched together at points
-called ``knots'' such that the full piecewise function is continuous and has
+Smoothing splines are essentially cubic functions stitched together at points
+called ``knots'' such that the full piece-wise function is continuous and has
 continuous first and second derivative. One can further define cyclic cubic
 splines, which simply have the constraint that the last knot and first knot
 are treated as the same, thus allowing a continuous cyclic function to be fit.
 ^[For a brief and entertaining introduction to smoothing splines, see 
 @cosmasplines. For a more in-depth look at splines, check out @wood2006]
 
-Computation of multilevel additive models with splines is availible in the
+Computation of multilevel additive models with splines is available in the
 `gamm4` package, which we use to fit the two following models.
 
 **Model 4** will introduce a cyclic cubic splines for time of day. 
@@ -210,34 +214,32 @@ Computation of multilevel additive models with splines is availible in the
 
 ## Model Evaluation
 
-To fit the data, we got all of the rider in Portland from [insert data here] to
-[insert date here] that occured in Portland, OR, for riders that had over 20 rides
-in Portland, OR. There were 35,370
-rides, 14,032 of which were given a rating. Overall 10.88\%
+To fit the data, we got all of the rides in Portland, OR from [insert data here] to
+[insert date here]for riders that had over 20 rides. There were 35,370
+rides, 14,032 of which were rated. Overall, 10.88
 percent of these rides were given a negative rating. There were 518 
-riders in the data set (each with more than 20 rides.)
+riders in the data set.
 
 All six models were fit twice: first to the full data set to get good estimates
-of the parameters, and second to a sample of 80 percent of the rides, so that
-predictive accuracy for out-of-sample observations could be determined. (The
-sample had to be stratified by rider, to guarentee that every rider had at 
-least on ride in the training set; otherwise the model would have no fit
-intercept to make predictions.)
+of the parameters, and second to a sample of 80 percent of the rides. We used
+the latter fit to make predictions for the remaining 20 percent of rides, to
+determine the predictive accuracy for out-of-sample observations. (The
+sample had to be stratified by rider, to guarantee that every rider had at 
+least on ride in the training set; otherwise models with random intercepts
+would be unable to make predictions for some rides.)
 
-The separation plots in `r ref("sep-plots-model1")` give a clear initial picture
+The separation plots in `r ref("modelfits", type = "table")` give a clear initial picture
 of how these model fits compare.  Model 1 performs very poorly compared to those
-that include rider intercepts, assigning mostly the same probability to all observations. 
-Models that include the rider intercept all seem to perform similarly.
-The log likelihoods and AIC scores (shown in `r ref("modelfits", type = "table")`)
-corroborate this. Naturally, this poses the question: Are the other variables
-simply far less important in predicting rider ratings or do rider intercepts
-encode more information that simply a rider general tendency to give a
-negative rating? We will return to this question shortly.
+that include rider intercepts, assigning the same probability to most observations. 
+Models that include the rider intercept perform similarly.
+The log likelihoods and AIC scores, shown in `r ref("modelfits", type = "table")`,
+corroborate this. Adding time dependency doesn't seem to impact predictive ability.
+We will see later, however, that it gives a fascinating result to interpret.
 
 
 \begin{table}[htb]
 \centering
-\caption{Model fit sumarries for full fittings.\label{tab:modelfits}}
+\caption{Model fit summaries for full-data fittings.\label{tab:modelfits}}
 \begin{tabular}{lm{4in}rr}
 \toprule
 \textbf{Model} & \textbf{Separation Plot} & $\mathcal{L}$ & \textbf{AIC}\\
@@ -272,14 +274,14 @@ options = "tbh")
 #options = "tbh")
 ```
 
-
-An important question to ask about the gains from the rider intercept is: how 
-much of that gain could have been achieved with randomly chosen groups? Obviously,
-if we split the observations into groups, each group will have a slightly different
-rate of negative rating even if the groups are randomly chosen. We can test this,
-by running a new model where instead of splitting the observations by rider, we
-randomly assign the rides a rider. `r ref("sep-plots-intercept-test")` shows that
-after testing it is clear that the gains are not random.
+The gains from the rider intercepts are great, but we are compelled to ask: how 
+much of that gain could have been achieved with randomly chosen groups? 
+\textit{i.e.} if riders were randomly assigned to rides, would the flexibility
+in the model created by allowing intercepts to vary increase predictive performance
+to the same degree?
+To test this, we ran a Model 4 after we randomly assign the rides a rider. This
+quick test nullified this skepticism, as you can see in the resulting separation
+plots in `r ref("sep-plots-intercept-test")`.
 
 ```{r intercept-test, echo=F, results='asis'}
 label(path = "figure/intercept_test_plot.pdf", 
@@ -362,11 +364,9 @@ Intercept & -2.284 & -3.081 & -3.133 & -2.328\\
 \end{tabular}
 \end{table}
 
-The results of the models are shown in `r ref("modelcoef", type = "table")`. 
-The strongest effects come from length and weekend: longer rides and rides on
-weekends are much less likely to be given a negative rating. Mean temperature
-and 4-hour cumulative rainfall both have small positive effects on the probability
-of negative rating, while gust speed and rainfall have little to no effect. 
+`r ref("modelcoef", type = "table")` presents the fixed effect estimates for
+our models. 
+<!-- Add more interpretation here soon!!!!!!!! -->
 
 ```{r time-fits, echo=F, results='asis'}
 label(path = "figure/time_fit_plot.pdf", 
@@ -378,38 +378,40 @@ predictors were set to zero.",
 options = "tbh")
 ```
 
-If we look at the marginal fits for time of day in `r ref("model1-time-fit")`,
-they are overall predictible. On weekdays, there are peaks in the morning and
-evening corresponding with rush hour traffic, and the trends on the weekends are
-much flatter. The fit for Model 3, which was made with four sinusoidal terms,
-is slightly different from Model 4 and Model 5, which were made with cyclic
-cubic splines. There are two probable reasons for this difference: first, the 
-sinusoidal terms have far less flexibility in the type of curves that can be
-formed than the splines; second, the splines, because they are a non-parametric
-method, penalize complexity of the fit while the parametric sinusoidal form 
-does not, making the splines more likely to be conservative with the fit and
-fit a flat line rather than a subtle pattern. The former explains most of the
-differences for the weekday fits while the latter explains most of the
-differences in the weekend fits.
 
-The most interesting result from these models, however, is that the rider
-intercepts encode a lot of information about the times of a typical riders rides.
+
+The marginal fits for time of day, shown in `r ref("model1-time-fit")`,
+are predictable. On weekdays, the probability of a negative rating peaks in the
+morning and afternoon, around when we expect rush hour traffic, and on weekends it stays
+steady throughout the day. While Model 4 and Model 5 give similar fits for time
+of day, Model 3's predictions peak at different times on weekdays and exhibit
+much more variability on weekends. There are two probable reasons for these 
+differences: first, the sinusoidal terms are less flexibile than the splines; 
+second, the splines, because they are a non-parametric functions, penalize
+complexity of the fit while the parametric sinusoidal form 
+does not, making the splines more conservative in their ``curviness.'' 
+The former explains the discrepancies in the weekday fits while the latter
+explains the discrepancies in the weekend fits. Given these differences,
+fitting time of day with splines is preferable; there is no motivation to constrain
+the functional form to any strict parametric form.
+
+But these marginal time-of-day fits don't just tell a story about our time terms;
+they also reveal part of why the random rider intercepts are such powerful predictors.
 Notice that in `r ref("model1-time-fit")`, the scale at which the Model 6 time
 fitted probabilities vary is much larger than the scale at which the other
 models' predictions vary. (The differences is so large we had to show them in
-separate plots!) Without allowing for varying rider intecepts, the time terms
-take on a lot more significant role. Interestingly, according to the separation
-plots in `r ref("modelfits", type = "table")` the time term has nowhere near 
-the amount of information that the rider intercepts seem to encode. 
+separate plots!) Without allowing for varying rider intercepts, the time terms
+take on a significant role. Yet, interestingly, the time term has nowhere near 
+the amount of information that the rider intercepts seem to encode,
+according to the separation plots in `r ref("modelfits", type = "table")`. 
 
 A clearer picture of what is going on is painted in `r ref("time-pred-plot")`.
-Model 1, which has a fixed intercept and no time dependence, has predictions
-that vary very little by time. The models with random intercepts (2--5) show 
-very strong temporal patterns, with very concentrated spikes in the morning
+Model 1's predictions, which has a fixed intercept and no time dependence, don't vary by
+time of day. The models with random intercepts (2--5) show 
+ strong temporal patterns, with concentrated spikes in the morning
 and evening. Model 6, which had the time of day spline but a fixed intercept,
-has a small temporal pattern, but does not represent the same degree of varying
-probabilities by time of day. 
-
+has a temporal pattern, but does not represent the same degree time dependence
+that the random intercept models do.
 ```{r time-predictions, echo=F, results='asis'}
 label(path = "figure/time_pred_plot.pdf", 
 caption = "Each of the models predictions for all rides with time of day on the x-axis.
