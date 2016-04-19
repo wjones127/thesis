@@ -1,0 +1,658 @@
+---
+title: "Models Round 2"
+author: "Will Jones"
+date: "March 11, 2016"
+output: html_document
+---
+
+```{r load-packages, echo=F, results='hide', message=F}
+packages <- c("dplyr", "ggplot2", "ggthemes", "caret", "lubridate", "gamm4",
+              "gridExtra", "binom", "tidyr", "knitr", "stargazer", "extrafont",
+              "grid")
+sapply(packages, library, character.only = TRUE)
+source("prob-var-plot.R")
+source("separation-plot.R")
+```
+
+
+```{r load-data, echo=F}
+# Load data
+#load('./rides.RData')
+#rides_final <- rides %>%
+#  mutate(length_meters = length)
+
+rides <- read.csv('sample.csv',
+                  col.names = c("trip_id", "rider", "length_meters", 
+                                "datetime", "rating", "rating_text"),
+                  colClasses = c("character", "factor", "numeric", 
+                                 "character", "factor", "factor"))
+rides_final <- rides %>%
+  mutate(datetime = ymd_hms(datetime, tz="America/Los_Angeles"),
+         stressful = ifelse(rating_text == "none", NA,
+                            ifelse(rating_text == "good", FALSE, TRUE)),
+         rider = as.factor(as.numeric(rider)))
+
+# Small sample for testing
+#rides_final <- sample_n(rides_final, 5e3)
+
+###################################
+## Comment this out later!!!
+# Shift the dates for the test data
+#day(rides_final$datetime) <- day(rides_final$datetime) - 200
+#rides_final$rider <- as.factor(rep(1:3, length.out = nrow(rides_final)))
+
+load('./weather_daily.RData')
+load('./rain_hourly.RData')
+```
+
+```{r transform-data, echo=F}
+# Join in various data sources
+rides_final <- rides_final %>%
+  mutate(date = floor_date(datetime, "day")) %>%
+  left_join(weather, by = "date") %>%
+  mutate(datetime_hour = floor_date(datetime, "hour")) %>%
+  left_join(rain, by=c("datetime_hour" = "datetime"))
+
+rides_final <- mutate(rides_final, time = datetime)
+day(rides_final$time) <- 1
+month(rides_final$time) <- 1
+year(rides_final$time) <- 2015
+rides_final <- rides_final %>%
+  mutate(time = as.numeric(time),
+         time = time - min(time),
+         time = time / 3600) # convert time from seconds to hours
+
+rides_final$weekend <- as.factor(wday(rides_final$datetime) %in% c(1, 7))
+
+# Filter out the rides with zero length
+rides_scaled <- rides_final %>% filter(length_meters != 0)
+
+# Scale the variables
+scaled_log_length <- scale(log(rides_scaled$length_meters))
+scaled_length <- scale(rides_scaled$length_meters)
+scaled_temp <- scale(rides_scaled$mean.temp)
+rides_scaled$length <- scaled_length[,1]
+rides_scaled$log_length <- scaled_log_length[,1]
+rides_scaled$mean.temp <- scaled_temp[,1]
+rides_scaled <- rides_scaled %>%
+  filter(!is.na(mean.temp) &
+         !is.na(rainfall))
+
+# Compute rider average log.length
+rider_avg_lengths <- rides_scaled %>%
+  group_by(rider) %>%
+  summarise(avg_log_length = mean(log_length, na.rm=TRUE))
+
+rides_scaled <- rides_scaled %>%
+  left_join(rider_avg_lengths, by="rider")
+
+
+rides_scaled <- rides_scaled %>%
+  mutate(gust.speed = ifelse(is.na(gust.speed), 0, gust.speed))
+
+# Reset the rider indexes
+rides_scaled$rider <- plyr::mapvalues(rides_scaled$rider,
+                                      from = levels(rides_scaled$rider),
+                                      to = 1:length(levels(rides_scaled$rider)))
+```
+
+Log length and temperature were standardized. The center of log length was 
+`r attr(scaled_log_length, "scaled:center")` and the scale factor was 
+`r attr(scaled_log_length, "scaled:scale")`. The center of temperature was
+`r attr(scaled_temp, "scaled:center")` and the scale factor was
+`r attr(scaled_temp, "scaled:scale")`.
+
+
+```{r summary, echo=FALSE}
+total_rides <- nrow(rides_scaled)
+rides_scaled <- rides_scaled %>% filter(!is.na(stressful))
+#rides_scaled <- sample_n(rides_scaled, 3000)
+# Find riders with at least 20 rated rides
+rider_counts <- rides_scaled %>% group_by(rider) %>% summarise(count = n()) %>%
+  filter(count > 20)
+rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
+
+rated_rides <- rides_scaled %>% nrow()
+unrated_rides <- total_rides - rated_rides
+
+neg_ratings <- sum(rides_scaled$stressful == TRUE)
+pos_ratings <- sum(rides_scaled$stressful == FALSE)
+
+num_riders <- rides_scaled$rider %>% unique() %>% length()
+```
+
+In this dataset, there are `r total_rides` rides, `r rated_rides / total_rides * 100`
+percent of which are rated (`r rated_rides` that were rated and `r unrated_rides`
+that were unrated.)
+
+`r neg_ratings / rated_rides * 100` percent of rated rides were rated negatively
+(`r neg_ratings` negative ratings and `r pos_ratings` positive ratings.)
+
+There are a total of `r num_riders` riders with more than 20 rides.
+
+```{r rider-plot, echo=F}
+rider_avg <- rides_final %>%
+  filter(!is.na(stressful)) %>%
+  group_by(rider) %>%
+  summarise(avg_rating = mean(stressful)) %>%
+  arrange(desc(avg_rating)) %>%
+  mutate(rider = as.character(rider))
+
+rider_avg_plot <- qplot(x = avg_rating, data = rider_avg, bins = 30) + 
+  theme_bw(base_family="CMU Serif") + 
+  scale_x_continuous(limits = c(0, 1)) + 
+  labs(title = "Distribution of Average Rider Rating")
+
+rider_avg_plot
+
+ggsave(rider_avg_plot, file="plots/rider_avgs.pdf", height = 3, width = 5)
+embed_fonts("plots/rider_avgs.pdf", outfile="plots/rider_avgs2.pdf")
+```
+
+## Exploratory Plots
+
+```{r make-plots, echo=FALSE, eval=FALSE}
+#length_plot <- prob_var_plot(rides_final, "length_meters", "stressful") +
+#  theme_bw(base_family="CMU Serif") + 
+#  labs(title = "Distribution of Negative Rating by Length",
+#       x = "length of ride", y = "prob. of negative rating",
+#       window_width = 20, rug = FALSE)
+
+#length_plot
+#
+#m <- gam(stressful ~ s(length_meters), data = rides_final, family = binomial)
+#plot(m)
+
+#ggsave(length_plot, file="plots/length_prob_plot.pdf", width = 5, height = 3)
+
+hour_plot <- prob_var_plot(rides_final, "time", "stressful") +
+  theme_bw(base_family="CMU Serif") + 
+  labs(title = "Distribution of Negative Rating by Time of Day",
+       x = "hour of day", y = "prob. of negative rating") +
+  scale_x_continuous(breaks = seq(0, 24, 3))
+
+hour_plot
+
+m <- gam(stressful ~ s(time, bs="cc", by=weekend), data = rides_final, family = binomial)
+plot(m)
+
+ggsave(hour_plot, file = "plots/hour_prob_plot.pdf", height = 3, width = 5)
+```
+
+
+## Models
+
+```{r fit-models}
+# Baseline: Logistic Regression
+model1 <- glm(stressful ~ log_length + mean.temp + gust.speed + rainfall + rainfall.4h,
+              data = rides_scaled, family=binomial)
+# Add rider intercepts
+model2 <- glmer(stressful ~ 1 + (1|rider) + log_length + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h,
+              data = rides_scaled, family=binomial)
+
+# Add mean ride length as predictor
+#model3 <- glmer(stressful ~ 1 + (1|rider) + log_length + mean.temp + gust.speed + 
+#                  rainfall + rainfall.4h + avg_log_length + weekend,
+#              data = rides_scaled, family=binomial)
+
+# Add sinusoidal time of day
+one_day <- 24 #hours
+
+model3 <- glmer(stressful ~ 1 + (1|rider) + log_length + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h + 
+                  I(sin(2 * pi / one_day * time)):weekend + 
+                  I(cos(2 * pi / one_day * time)):weekend + 
+                  I(sin(4 * pi / one_day * time)):weekend + 
+                  I(cos(4 * pi / one_day * time)):weekend,
+              data = rides_scaled, family=binomial)
+
+# Add smoother for time of day
+model4 <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
+                  rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
+                random =~(1|rider),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_scaled, family = binomial)
+
+# Add smoother for length
+model5 <- gamm4(stressful ~ 1 +  s(log_length) + mean.temp + gust.speed +
+                  rainfall + rainfall.4h +
+                  s(time, bs="cc", k=9, by = weekend),
+                random =~(1|rider),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_scaled, family = binomial)
+
+# Remove rider intercepts
+model6 <- gam(stressful ~ 1 + log_length + mean.temp + gust.speed +
+                  rainfall + rainfall.4h + 
+                  s(time, bs="cc", k=9, by = weekend),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_scaled, family = binomial)
+```
+
+
+```{r, echo=FALSE}
+invlogit <- function (x) { 1 / (1 + exp(-x))}
+
+data_subset <- rides_scaled %>% slice(1:20)
+# Trying to get predictions that combine smoothers and random intercept. It's hard.
+predict_gamm <- function(model, newdata) {
+  intercepts <- coef(model$mer)$rider[["(Intercept)"]]
+  intercept_vector <- intercepts[match(newdata$rider, rownames(coef(model$mer)$rider))]
+  invlogit(predict(model$gam, newdata = newdata) + intercept_vector)
+}
+predict_gamm(model5, data_subset)
+
+
+```
+
+## Model Fits
+
+```{r training-sep-plots, warning=FALSE}
+fitted_values <- data.frame("actual" = rides_scaled$stressful,
+                            "predict1" = predict(model1, type="response"),
+                            "predict2" = predict(model2, type="response"),
+                            "predict3" = predict(model3, type="response"),
+                            "predict4" = predict_gamm(model4, rides_scaled),
+                            "predict5" = predict_gamm(model5, rides_scaled),
+                            "predict6" = predict(model6, type="response"))
+
+# Define a layout matrix
+# lay <- rbind(c(1, 2, 2, 2, 2),
+#              c(3, 4, 4, 4, 4),
+#              c(5, 6, 6, 6, 6),
+#              c(7, 8, 8, 8, 8),
+#              c(9, 10, 10, 10, 10),
+#              c(11, 12, 12, 12, 12))
+# 
+# train_sep_plots <- grid.arrange(
+#   textGrob("Model 1"), separation_plot(fitted_values, "actual", "predict1"),
+#             textGrob("Model 2"), separation_plot(fitted_values, "actual", "predict2"),
+#             textGrob("Model 3"), separation_plot(fitted_values, "actual", "predict3"),
+#             textGrob("Model 4"), separation_plot(fitted_values, "actual", "predict4"),
+#             textGrob("Model 5"), separation_plot(fitted_values, "actual", "predict5"),
+#             textGrob("Model 6"), separation_plot(fitted_values, "actual", "predict6"),
+#             ncol=2, layout_matrix = lay)
+
+for (i in 1:6) {
+  p <- separation_plot(fitted_values, "actual", paste("predict", as.character(i), sep = ""))
+  ggsave(p, file=paste("plots/model", as.character(i), "-sep.pdf", sep=""), 
+         width = 4, height = 0.25)
+}
+
+#ggsave(train_sep_plots, file="plots/sep_plots.pdf",
+#       width = 5, height = 3)
+
+prob_eval_plot <- function(df, actual_col, pred_col, title) {
+  prob_var_plot(df, pred_col, actual_col, window_width = 0.03, rug = FALSE) + 
+  theme_bw(base_family="CMU Serif") + 
+    geom_abline(slope = 1, intercept = 0, color = "red") + 
+    scale_x_continuous(limits=c(0,1)) + 
+    labs(title = title, y = "Empirical Probability",
+         x = "Predicted Probability")
+}
+
+prob_eval_plots <- grid.arrange(
+  prob_eval_plot(fitted_values, "actual", "predict1", "Model 1"),
+  prob_eval_plot(fitted_values, "actual", "predict2", "Model 2"),
+  prob_eval_plot(fitted_values, "actual", "predict3", "Model 3"),
+  prob_eval_plot(fitted_values, "actual", "predict4", "Model 4"),
+    prob_eval_plot(fitted_values, "actual", "predict5", "Model 5"),
+    prob_eval_plot(fitted_values, "actual", "predict6", "Model 6"),
+  ncol = 2
+)
+
+ggsave(prob_eval_plots, file="plots/prob_eval_plots.pdf",
+       width = 6, height = 6)
+```
+
+
+```{r performance-measures}
+# Loglikelihood
+logLik(model1)
+logLik(model2)
+logLik(model3)
+logLik(model4$mer)
+logLik(model5$mer)
+logLik(model6)
+
+# AIC
+model1$aic
+AIC(model2)
+AIC(model3)
+AIC(model4$mer)
+AIC(model5$mer)
+AIC(model6)
+```
+
+```{r summary-table, results='asis', echo=F}
+stargazer(model1, model2, model3, model6, type="html", title="results",
+          align=TRUE, ci = TRUE)
+```
+
+
+```{r model-confint}
+kable(confint.lm(model1))
+kable(confint(model2, method="Wald"))
+kable(confint(model3, method="Wald"))
+kable(confint(model4$gam))
+kable(confint(model5$gam))
+```
+
+```{r gam-model-summaries}
+summary(model4$gam)
+summary(model5$gam)
+```
+
+
+## Model Comparison
+
+```{r}
+anova(model2, model3)
+```
+
+
+```{r cv-split}
+# Cross validation!!
+inTraining <- createDataPartition(rides_scaled$rider, p = 0.80, list = FALSE)
+rides_train <- rides_scaled[inTraining,]
+rides_test <- rides_scaled[-inTraining,]
+summary(rides_test$rider)
+summary(rides_test$rider)
+```
+
+
+```{r refit-models}
+# Baseline: Logistic Regression
+model1_t <- glm(stressful ~ log_length + mean.temp + gust.speed + rainfall + rainfall.4h + weekend,
+              data = rides_train, family=binomial)
+# Add rider intercepts
+model2_t <- glmer(stressful ~ 1 + (1|rider) + log_length + weekend + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h,
+              data = rides_train, family=binomial)
+
+# Add mean ride length as predictor
+#model3_t <- glmer(stressful ~ 1 + (1|rider) + log_length + mean.temp + gust.speed + 
+#                  rainfall + rainfall.4h + avg_log_length + weekend,
+#              data = rides_train, family=binomial)
+
+# Add sinusoidal time of day
+one_day <- 24 #hours
+
+model3_t <- glmer(stressful ~ 1 + (1|rider) + log_length + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h  + 
+                    I(sin(2 * pi / one_day * time)):weekend + 
+                  I(cos(2 * pi / one_day * time)):weekend + 
+                  I(sin(4 * pi / one_day * time)):weekend + 
+                  I(cos(4 * pi / one_day * time)):weekend,
+              data = rides_train, family=binomial)
+
+# Add smoother for time of day
+model4_t <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
+                  rainfall + rainfall.4h + s(time, bs="cc", k=9, by = weekend),
+                random =~(1|rider),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_train, family = binomial)
+
+# Add smoother for length
+model5_t <- gamm4(stressful ~ 1 +  s(log_length) + mean.temp + gust.speed +
+                  rainfall + rainfall.4h +
+                  s(time, bs="cc", k=9, by = weekend),
+                random =~(1|rider),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_train, family = binomial)
+
+model6_t <- gam(stressful ~ 1 + log_length + mean.temp + gust.speed +
+                  rainfall + rainfall.4h +
+                  s(time, bs="cc", k=9, by = weekend),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_train, family = binomial)
+```
+
+
+```{r test-plots}
+fitted_values_t <- data.frame("actual" = rides_test$stressful,
+                            "predict1" = predict(model1_t, rides_test, type="response"),
+                            "predict2" = predict(model2_t, rides_test, type="response"),
+                            "predict3" = predict(model3_t, rides_test, type="response"),
+                            "predict4" = predict_gamm(model4_t, rides_test),
+                            "predict5" = predict_gamm(model5_t, rides_test),
+                            "predict6" = predict(model6_t, rides_test, type="response"))
+
+test_sep_plots <- grid.arrange(separation_plot(fitted_values_t, "actual", "predict1"),
+            separation_plot(fitted_values_t, "actual", "predict2"),
+            separation_plot(fitted_values_t, "actual", "predict3"),
+            separation_plot(fitted_values_t, "actual", "predict4"),
+            separation_plot(fitted_values_t, "actual", "predict5"),
+            separation_plot(fitted_values_t, "actual", "predict6"),
+            ncol=1)
+
+ggsave(test_sep_plots, file = "plots/sep_plots_out_of_sample.pdf",
+       width = 6, height = 6)
+
+test_eval_plots <- grid.arrange(
+  prob_eval_plot(fitted_values_t, "actual", "predict1", "Model 1"),
+  prob_eval_plot(fitted_values_t, "actual", "predict2", "Model 2"),
+  prob_eval_plot(fitted_values_t, "actual", "predict3", "Model 3"),
+  prob_eval_plot(fitted_values_t, "actual", "predict4", "Model 4"),
+    prob_eval_plot(fitted_values_t, "actual", "predict5", "Model 5"),
+    prob_eval_plot(fitted_values_t, "actual", "predict6", "Model 6"),
+  ncol = 2
+)
+
+ggsave(test_eval_plots, file="plots/eval_plot_out_of_sample.pdf",
+       width = 6, height = 6)
+```
+
+
+### Rider Intercepts
+
+```{r}
+get_intercepts <- function(model, group_predictors) {
+  if (missing(group_predictors)) return(coef(model)$rider[["(Intercept)"]])
+  coef_table <- coef(model)$rider
+  coef_table$rider <- rownames(coef_table)
+  coef_table <- coef_table[,c("rider", "(Intercept)", group_predictors)]
+  rider_x <- rides_scaled[,c("rider", group_predictors)] %>% data.frame() %>% distinct()
+  coef_table <- left_join(coef_table, rider_x, by="rider")
+  intercept <- coef_table[["(Intercept)"]]
+  for (i in 1:length(group_predictors)) {
+    intercept <- intercept + coef_table[[paste(group_predictors[i], "x", sep=".")]] * coef_table[[paste(group_predictors[i], "y", sep=".")]]
+  }
+  intercept
+}
+
+rider_intercepts <- data.frame("rider" = rownames(coef(model3)$rider[1]),
+                             "model2" = get_intercepts(model2),
+                             "model4" = get_intercepts(model3),
+                              "model5" = coef(model4$mer)$rider[["(Intercept)"]],
+                              "model6" = coef(model5$mer)$rider[["(Intercept)"]]) %>%
+  tbl_df() %>%
+  gather(model, intercept, 2:5)
+
+rider_intercept_avgs <- rider_intercepts %>%
+  group_by(model) %>%
+  summarise(avg_intercept = mean(intercept))
+
+rider_intercept_plot <- ggplot(rider_intercepts, aes(x = intercept)) + geom_histogram(bins=30) +
+  facet_wrap(~ model, ncol = 2) + 
+  theme_bw(base_family="CMU Serif") + 
+  geom_vline(data = rider_intercept_avgs, size = 1,
+             aes(xintercept = avg_intercept), color = "steelblue") + 
+  labs(title="Distribution of Rider Intercepts")
+
+rider_intercept_plot
+
+ggsave(rider_intercept_plot, file="plots/rider_intercept_plot.pdf",
+       width = 6, height = 4)
+
+# subtract averages
+rider_intercepts_normalized <- left_join(rider_intercepts, rider_intercept_avgs, by="model") %>%
+  mutate(intercept = intercept - avg_intercept) %>%
+  filter(model != "model1")
+
+rider_intercepts_change <- ggplot(rider_intercepts_normalized, aes(x = model, y = intercept, group = rider)) +
+  geom_line(alpha = 0.5, size = 0.5) + 
+  theme_bw(base_family="CMU Serif") + 
+  labs(y = expression(alpha[j]),
+       title = "Changes in Intercepts by Model")
+ggsave(rider_intercepts_change, file="plots/rider_intercepts_change.pdf",
+       width = 6, height = 4)
+```
+
+### Time of Day
+
+```{r time-of-day-plots}
+# Want to find a rider ID that seems most typical
+intercepts <- coef(model5$mer)$rider[["(Intercept)"]]
+rider_labels <- levels(as.factor(as.numeric(rides_scaled$rider)))
+typicalest_rider <- rider_labels[which.min(intercepts - mean(intercepts))]
+
+res <- 1000
+  
+fake_time_data <- data.frame("time" = seq(0, 24, length.out = 2*res),
+                             "rider" = as.factor(rep(typicalest_rider, 2*res)),
+                             "log_length" = rep(median(rides_scaled$log_length), 2*res),
+                             "mean.temp" = rep(mean(rides_scaled$mean.temp), 2*res),
+                             "gust.speed" = rep(0, 2*res),
+                             "rainfall" = rep(0, 2*res),
+                             "rainfall.4h" = rep(0, 2*res),
+                             "weekend" = as.factor(rep(c(FALSE, TRUE), 2*res)))
+
+fake_time_data$model3 <- predict(model3, fake_time_data, type="response")
+fake_time_data$model4 <- predict_gamm(model4, fake_time_data)
+fake_time_data$model5 <- predict_gamm(model5, fake_time_data)
+fake_time_data$model6 <- predict(model6, fake_time_data, type="response")
+
+#predictions_from_1 <- predict(model1, type="response")
+
+fake_time_data <- fake_time_data %>%
+  gather(model, prediction, 9:12)
+
+fake_time_data <- arrange(fake_time_data, model, time)
+
+
+fake_time_data$weekend <- plyr::mapvalues(fake_time_data$weekend,
+                                      from = c(FALSE, TRUE),
+                                      to = c("weekday", "weekend"))
+
+time_plot <- filter(fake_time_data, model != "model6") %>%
+  ggplot(aes(x = time, y = prediction, color = model)) +
+  geom_line() + 
+  facet_wrap(~ weekend, nrow = 1) +
+  theme_bw(base_family="CMU Serif") + 
+  scale_x_continuous(breaks = c(0, 6, 12, 18, 24))  +
+  scale_color_grey() +
+  labs(x = "hour of day",
+       y = "p(negative rating)",
+       title = "Fitted Model Functional Forms for Time of Day") 
+
+#qplot(x =rides_scaled$time, y = predictions_from_2, alpha = 0.25)
+
+time_plot
+
+ggsave(time_plot, file="plots/time_fit_plot.pdf",
+       width = 6, height = 3)
+
+time_plot_6 <- filter(fake_time_data, model == "model6") %>%
+  ggplot(aes(x = time, y = prediction)) +
+  geom_line() + 
+  facet_wrap(~ weekend, nrow = 1) +
+  theme_bw(base_family="CMU Serif") + 
+  scale_x_continuous(breaks = c(0, 6, 12, 18, 24))  +
+  scale_color_grey() +
+  labs(x = "hour of day",
+       y = "p(negative rating)",
+       title = "Time of Day Fit for Model 6") 
+
+ggsave(time_plot_6, file="plots/time_fit_plot_6.pdf",
+       width = 6, height = 3)
+```
+
+Weird. It seems the random intercepts allow us to encode a lot of information
+really quickly.
+
+## Random Intercept Tests
+
+```{r}
+
+model_riders <- glmer(stressful ~ 1 + (1|rider) + log_length + weekend + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h,
+              data = rides_scaled, family=binomial)
+
+rides_scaled$fake_rider <- sample(1:num_riders, nrow(rides_scaled), replace = TRUE)
+
+model_random <- glmer(stressful ~ 1 + (1|fake_rider) + log_length + weekend + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h,
+              data = rides_scaled, family=binomial)
+
+intercept_test_fitted_values <- data.frame("actual" = rides_scaled$stressful,
+                            "predict_rider" = predict(model_riders, type="response"),
+                            "predict_random" = predict(model_random, type="response"))
+
+intercept_test_sep_plots <- grid.arrange(
+  separation_plot(intercept_test_fitted_values, "actual", "predict_rider"),
+  separation_plot(intercept_test_fitted_values, "actual", "predict_random"),
+  ncol=1, padding = unit(c(0, 0, 0, 0), "cm"))
+
+intercept_test_sep_plots
+ggsave(intercept_test_sep_plots, file="plots/intercept_test_plot.pdf",
+       width = 5.5, height = 1.5)
+```
+
+
+```{r}
+time_pred <- fitted_values
+time_pred$time <- rides_scaled$time
+time_pred <-  time_pred %>%
+  gather(model, pred, 2:7) %>%
+  mutate(model = factor(model))
+time_pred$model <- plyr::mapvalues(time_pred$model,
+                                   from = levels(time_pred$model),
+                                   to = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", "Model 6"))
+
+time_pred_plot <- ggplot(time_pred, aes(x = time, y = pred)) +
+  geom_point(alpha = 0.1, size = 0.8) + 
+  facet_wrap(~model) +
+  theme_bw(base_family="CMU Serif") + 
+  labs(title = "Model Predictions by Time")
+
+time_pred_plot
+
+ggsave(time_pred_plot, file="plots/time_pred_plot.pdf",
+       width = 6, height = 4)
+```
+
+# What do the rider intercepts tell us?
+
+Let's try and figure out the probability that each rider would give a typical
+ride a negative rating.
+
+```{r}
+num_riders <- rides_scaled$rider %>% unique() %>% length()
+fake_rider_data <- data.frame("rider" = unique(rides_scaled$rider),
+                              "time" = rep(12, num_riders),
+                             "log_length" = rep(median(rides_scaled$log_length), num_riders),
+                             "mean.temp" = rep(mean(rides_scaled$mean.temp), num_riders),
+                             "gust.speed" = rep(0, num_riders),
+                             "rainfall" = rep(0, num_riders),
+                             "rainfall.4h" = rep(0, num_riders),
+                             "weekend" = as.factor(rep(FALSE, num_riders)))
+
+fake_rider_data$model2 <- predict(model2, fake_rider_data, type="response")
+fake_rider_data$model4 <- predict_gamm(model4, fake_rider_data)
+
+fake_rider_data <- fake_rider_data %>%
+  gather(model, prediction, 9:10)
+
+rider_tendency <- ggplot(fake_rider_data, aes(x = prediction)) + 
+  geom_histogram(bins = 20) + 
+  facet_wrap(~model) + 
+  theme_bw(base_family="CMU Serif") + 
+  labs(x = "p(negative rating)",
+       title = "Rider Tendency for Negative Rating") 
+
+ggsave(rider_tendency, file="plots/rider_predictions.pdf",
+       width =5, height = 3)
+```
+

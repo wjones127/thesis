@@ -1,0 +1,319 @@
+---
+title: "Rider Clustering"
+author: "Will Jones"
+date: "April 1, 2016"
+output: html_document
+---
+
+```{r load-packages, echo=F, results='hide', message=F}
+packages <- c("dplyr", "ggplot2", "ggthemes", "caret", "lubridate", "gamm4",
+              "gridExtra", "binom", "tidyr", "knitr", "stargazer", "extrafont")
+sapply(packages, library, character.only = TRUE)
+source("prob-var-plot.R")
+source("separation-plot.R")
+```
+
+
+```{r load-data, echo=F}
+# Load data
+#load('./rides.RData')
+#rides_final <- rides %>%
+#  mutate(length_meters = length)
+
+rides <- read.csv('sample.csv',
+                  col.names = c("trip_id", "rider", "length_meters", 
+                                "datetime", "rating", "rating_text"),
+                  colClasses = c("character", "factor", "numeric", 
+                                 "character", "factor", "factor"))
+rides_final <- rides %>%
+  mutate(datetime = ymd_hms(datetime, tz="America/Los_Angeles"),
+         stressful = ifelse(rating_text == "none", NA,
+                            ifelse(rating_text == "good", FALSE, TRUE)),
+         rider = as.factor(as.numeric(rider)))
+
+###################################
+## Comment this out later!!!
+# Shift the dates for the test data
+#day(rides_final$datetime) <- day(rides_final$datetime) - 200
+#rides_final$rider <- as.factor(rep(1:3, length.out = nrow(rides_final)))
+
+load('./weather_daily.RData')
+load('./rain_hourly.RData')
+```
+
+```{r transform-data, echo=F}
+# Join in various data sources
+rides_final <- rides_final %>%
+  mutate(date = floor_date(datetime, "day")) %>%
+  left_join(weather, by = "date") %>%
+  mutate(datetime_hour = floor_date(datetime, "hour")) %>%
+  left_join(rain, by=c("datetime_hour" = "datetime"))
+
+rides_final <- mutate(rides_final, time = datetime)
+day(rides_final$time) <- 1
+month(rides_final$time) <- 1
+year(rides_final$time) <- 2015
+rides_final <- rides_final %>%
+  mutate(time = as.numeric(time),
+         time = time - min(time),
+         time = time / 3600) # convert time from seconds to hours
+
+rides_final$weekend <- as.factor(wday(rides_final$datetime) %in% c(1, 7))
+
+# Filter out the rides with zero length
+rides_scaled <- rides_final %>% filter(length_meters != 0)
+
+# Scale the variables
+scaled_log_length <- scale(log(rides_scaled$length_meters))
+scaled_length <- scale(rides_scaled$length_meters)
+scaled_temp <- scale(rides_scaled$mean.temp)
+rides_scaled$length <- scaled_length[,1]
+rides_scaled$log_length <- scaled_log_length[,1]
+rides_scaled$mean.temp <- scaled_temp[,1]
+rides_scaled <- rides_scaled %>%
+  filter(!is.na(mean.temp) &
+         !is.na(rainfall))
+
+# Find riders with at least 20 rated rides
+rider_counts <- rides_scaled %>% group_by(rider) %>% summarise(count = n()) %>%
+  filter(count > 20)
+rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
+
+
+rides_scaled <- rides_scaled %>%
+  mutate(gust.speed = ifelse(is.na(gust.speed), 0, gust.speed))
+
+```
+
+
+# Classifying Riders
+
+We need to understand how riders differ. Our result from the previous chapter
+underscore this need. Clearly there are different types of riders, and this
+accounts for a huge amount of the patterns in how riders ride. We can get for
+each rider
+
+- Frequency of rides, in rides per week
+- Proportion of rides on weekends
+- Patterns in time of day on weekdays
+- Patterns in ride length
+
+The last two are a little vague. How can we get variables that describe patterns
+of rides. Summary statistics like mean and variance can help, but really don't
+give a great description of rider patterns. How would mean time of day help us?
+Instead, we can transform time of day and length patterns into high dimensional
+varianbles and then do principle component analysis (PCA) to create summaries
+that best describe those distributions. We keep these as two separate PCA 
+a distinct from other variables to keep some interprebility in this model. 
+
+```{r rider-freq}
+# Compute rider averages
+riders <- rides_scaled %>%
+  group_by(rider) %>%
+  summarise(first_date = min(datetime),
+            last_date = max(datetime),
+            count = n(),
+            prop_weekend = sum(weekend == TRUE) / count) %>%
+  mutate(freq = 7 * count / as.numeric(last_date - first_date))
+
+qplot(x = freq, data = riders, bins = 40) + 
+  labs(title = "Ride Frequency by Rider",
+  x = "Rides per Week", 
+  y = "Count") +
+  theme_bw()
+```
+
+# Game plan
+
+Okay, so here's the game plan:
+
+1. Compute freq of rides
+2. Do PCA for length and time patterns (would quantiles work better for length?)
+3. Take freq. of rides, PC1 & PC2 from length and time patterns
+4. Do clustering of riders
+5. Plot avg pattern for each cluster, describe
+
+
+## Length patterns
+
+
+```{r length-pca}
+hist(rides_scaled$log_length)
+bins <- 12
+rider_length_table <- table(as.character(rides_scaled$rider), 
+      cut(rides_scaled$log_length, 
+          breaks = seq(from = -5, to = 2, length = bins + 1)))
+rider_length_dist <- rider_length_table %>% 
+  data.frame() %>%
+  rename(rider = Var1)
+
+rider_lengths <- spread(rider_length_dist, Var2, Freq)
+
+rider_lengths <- cbind(rider_lengths$rider, 
+                           rider_lengths[, -1] / rowSums(rider_lengths[, -1])) %>%
+  rename(rider = `rider_lengths$rider`)
+
+pc_length <- prcomp(rider_lengths[,-1], scale = TRUE)
+
+qplot(x = 1:bins, y = pc_length$sdev^2 / sum(pc_length$sdev^2)) + 
+  geom_line() + 
+  labs(title = "Scree Plot for Ride Length PCA",
+       x = "Principle Component",
+       y = "Proportion of Variance Explained") + 
+  theme_bw(base_family="CMU Serif")
+
+pc_length_rotation <- data.frame("length" = rownames(pc_length$rotation),
+                                 pc_length$rotation) %>%
+  tbl_df() %>%
+  select(length, PC1, PC2, PC3, PC4) %>%
+  gather(pc, value, -length)
+
+ggplot(pc_length_rotation, aes(x = length, y = value)) + 
+  geom_bar(stat = "identity") + 
+  facet_wrap(~pc, ncol = 2)+ 
+  theme_bw(base_family="CMU Serif")
+
+rider_lengths_w_pc <- cbind(rider_lengths, pc_length$x)
+
+#qplot(x = PC1, y = PC2, data = rider_lengths_w_pc)
+```
+
+
+## Time Patterns
+
+Let's try to use PCA to create simple vectors to describe people's time of ride
+patterns. 
+
+```{r time-pca}
+rider_weekday_times <- rides_scaled %>%
+  filter(weekend == FALSE) %>%
+  mutate(time = floor(time)) 
+
+rider_times <- table(as.factor(as.numeric(rider_weekday_times$rider)),
+                     rider_weekday_times$time) %>% 
+  data.frame() %>%
+  rename(rider = Var1, time = Var2, freq = Freq) %>%
+  spread(time, freq)
+
+# Let's normalize the rider times
+rider_times <- cbind(rider_times$rider, 
+                           rider_times[, -1] / rowSums(rider_times[, -1])) %>%
+  rename(rider = `rider_times$rider`)
+
+pc <- prcomp(rider_times[,-1], scale=TRUE, retx = TRUE)
+
+
+qplot(x = 1:23, y = pc$sdev^2 / sum(pc$sdev^2)) + 
+  geom_line() + 
+  labs(title = "Scree Plot for Rider Variables",
+       x = "Principle Component",
+       y = "Proportion of Variance Explained") + 
+  theme_bw(base_family="CMU Serif") 
+
+pc_rotation <- data.frame("hour" = 1:23, pc$rotation) %>%
+  tbl_df() %>%
+  select(hour, PC1, PC2, PC3, PC4) %>%
+  gather(pc, value, -hour)
+
+ggplot(pc_rotation, aes(x = hour, y = value)) + 
+  geom_bar(stat = "identity") + 
+  facet_wrap(~pc, ncol = 1) +
+    theme_bw(base_family="CMU Serif") +
+  labs(title = "Loadings for First Four Principal Compenents",
+       x = "hour of day") + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12, 15, 18, 21, 24))
+
+rider_times_w_pc <- cbind(rider_times, pc$x)
+
+clustering <- kmeans(select(rider_times_w_pc, PC1, PC2, PC3, PC4, PC5, PC6), 4, nstart = 30)
+
+rider_times_w_pc$cluster <- as.factor(clustering$cluster)
+
+qplot(x = PC1, y = PC2, color = cluster, data = rider_times_w_pc)
+
+chosen_riders <- c("249", "470", "178", "456", "22", "63", "313", "360", "292")
+
+filter(rider_times_w_pc, rider %in% chosen_riders) %>%
+  ggplot(aes(x = PC1, y = PC2, label = rider)) + geom_text()
+
+rider_times_representative <- rider_times %>%
+  gather(hour, count, 2:24) %>%
+  filter(rider %in% chosen_riders) %>%
+  mutate(hour = as.numeric(hour))
+
+ggplot(rider_times_representative, aes(x = hour, y = count)) + geom_bar(stat="identity") + 
+  facet_wrap(~rider, ncol = 3) + 
+  theme_bw() +
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12, 15, 18, 21, 24))
+
+```
+
+
+# Clustering
+
+```{r clustering}
+riders_final <- riders %>%
+  left_join(rider_times_w_pc, by = "rider") %>%
+  select(rider, count, freq, prop_weekend, PC1, PC2) %>%
+  rename(time_pc1 = PC1, time_pc2 = PC2) %>%
+  left_join(select(rider_lengths_w_pc, rider, PC1, PC2), by = "rider") %>%
+  rename(length_pc1 = PC1, length_pc2 = PC2)
+
+# Need to standardize these variables
+scaled_freq <- scale(riders_final$freq)
+scaled_weekend <- scale(riders_final$prop_weekend)
+riders_final$freq <- scaled_freq[,1]
+riders_final$prop_weekend <- scaled_weekend[,1]
+
+
+clustering <- kmeans(select(riders_final, freq, prop_weekend, time_pc1, time_pc2,
+                            length_pc1, length_pc2),
+                     4, nstart = 30)
+
+riders_final$cluster <- as.factor(clustering$cluster)
+
+qplot(x = time_pc1, y = time_pc2, color = cluster, data = riders_final)
+qplot(x = length_pc1, y = length_pc2, color = cluster, data = riders_final)
+qplot(x = freq, y = prop_weekend, color = cluster, data = riders_final)
+
+test_k <- function(k) {
+  clustering <- kmeans(select(riders_final, freq, prop_weekend, time_pc1, time_pc2,
+                            length_pc1, length_pc2),
+                     k, nstart = 40)
+  clustering$tot.withinss
+}
+ss <- sapply(1:8, test_k)
+
+qplot(x = 1:8, y = ss) + geom_line() +
+  labs(title = "Total Within SS by Choice of k",
+       x = "k",
+       y = "Total Within SS")
+```
+
+
+
+## What if we fit models with these clusters?
+
+```{r join-group}
+rides_scaled <- left_join(rides_scaled, riders_final, by = "rider")
+```
+
+```{r fit-models}
+# Add smoother for time of day
+model1 <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
+                  rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
+                random =~(1|rider),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_scaled, family = binomial)
+
+one_day <- 24 #hours
+# Add smoother for time of day
+model2 <- glmer(stressful ~ 1 + mean.temp + gust.speed + 
+                  rainfall + rainfall.4h + 
+                  (log_length + 
+                     I(sin(2 * pi / one_day * time)):weekend + 
+                  I(cos(2 * pi / one_day * time)):weekend + 
+                  I(sin(4 * pi / one_day * time)):weekend + 
+                  I(cos(4 * pi / one_day * time)):weekend|cluster),
+              data = rides_scaled, family=binomial)
+8```
