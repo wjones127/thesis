@@ -83,6 +83,19 @@ rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
 rides_scaled <- rides_scaled %>%
   mutate(gust.speed = ifelse(is.na(gust.speed), 0, gust.speed))
 
+# Filter out riders that don't rate any rides
+riders <- rides_scaled$rider %>% unique()
+riders_with_ratings <- filter(rides_scaled, !is.na(stressful))$rider %>% unique()
+riders_without_ratings <- riders[!riders %in% riders_with_ratings]
+rides_scaled <- filter(rides_scaled, !rider %in% riders_without_ratings)
+
+# Reset the rider indexes
+rides_scaled$rider <- rides_scaled$rider %>%
+  as.numeric() %>%
+  as.factor() %>%
+  plyr::mapvalues(from = levels(.),
+                  to = 1:length(levels(.)))
+
 ```
 
 
@@ -99,7 +112,7 @@ each rider
 - Patterns in ride length
 
 The last two are a little vague. How can we get variables that describe patterns
-of rides. Summary statistics like mean and variance can help, but really don't
+of rides? Summary statistics like mean and variance can help, but really don't
 give a great description of rider patterns. How would mean time of day help us?
 Instead, we can transform time of day and length patterns into high dimensional
 varianbles and then do principle component analysis (PCA) to create summaries
@@ -272,9 +285,9 @@ clustering <- kmeans(select(riders_final, freq, prop_weekend, time_pc1, time_pc2
 
 riders_final$cluster <- as.factor(clustering$cluster)
 
-qplot(x = time_pc1, y = time_pc2, color = cluster, data = riders_final)
-qplot(x = length_pc1, y = length_pc2, color = cluster, data = riders_final)
-qplot(x = freq, y = prop_weekend, color = cluster, data = riders_final)
+qplot(x = time_pc1, y = time_pc2, shape = cluster, data = riders_final)
+qplot(x = length_pc1, y = length_pc2, shape = cluster, data = riders_final)
+qplot(x = freq, y = prop_weekend, shape = cluster, data = riders_final)
 
 test_k <- function(k) {
   clustering <- kmeans(select(riders_final, freq, prop_weekend, time_pc1, time_pc2,
@@ -298,10 +311,12 @@ qplot(x = 1:8, y = ss) + geom_line() +
 rides_scaled <- left_join(rides_scaled, riders_final, by = "rider")
 ```
 
-```{r fit-models}
+```{r fit-models, eval = FALSE}
 # Add smoother for time of day
 model1 <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
-                  rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
+                  rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend) +
+                  # rider-level predictors
+                  freq + prop_weekend + time_pc1 + time_pc2 + length_pc1 + length_pc2,
                 random =~(1|rider),
                 knots=list(time=seq(0, 24, 3)),
                 data = rides_scaled, family = binomial)
@@ -316,4 +331,49 @@ model2 <- glmer(stressful ~ 1 + mean.temp + gust.speed +
                   I(sin(4 * pi / one_day * time)):weekend + 
                   I(cos(4 * pi / one_day * time)):weekend|cluster),
               data = rides_scaled, family=binomial)
-8```
+
+model3 <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
+                  rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
+                random =~(1 + log_length|cluster),
+                knots=list(time=seq(0, 24, 3)),
+                data = rides_scaled, family = binomial)
+
+```
+
+
+Let's see how models in STAN do to compare
+```{r stan-models}
+
+rides_complete <- rides_scaled %>% filter(!is.na(stressful))
+
+library(rstan)
+#package the data for stan
+data = list(
+  num_rides = length(rides_complete$stressful),
+  num_cyclists = rides_complete$rider %>% unique() %>% length(),
+  rating = as.numeric(rides_complete$stressful),
+  length = as.numeric(rides_complete$log_length),
+  rider = as.numeric(rides_complete$rider),
+  cyclist = as.numeric(rides_complete$rider),
+  cyclist_freq = riders_final$freq
+)
+
+#compile the model (takes a minute or so)
+model = rstan::stan_model(file="rider_model1.stan")
+
+#evaluate the model
+sampling_iterations = 1e3 #best to use 1e3 or higher
+out = rstan::sampling(
+  object = model
+  , data = data
+  , chains = 1
+  , iter = sampling_iterations
+  , warmup = sampling_iterations/2
+  , refresh = sampling_iterations/10 #show an update @ each %10
+  , seed = 1
+  , init = list(list(beta_length = 0,
+                     sigma_a = 1,
+                     a_beta_0 = 0,
+                     a_beta_freq = 0))
+)
+```
