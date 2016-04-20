@@ -189,7 +189,7 @@ These functions can be linear, so generalized linear regression is a subset of
 additive models. But more interestingly, these functions can be non-parametric.
 ^[How are these models fit? Using
 what's known as the Backfitting Algorithm. We  define the $k$th partial residuals 
-$Y^{(k)} = Y - \left(\alpha \sum_{j \neq k} f_j(x_j)\right)$. (That is, define
+$Y^{(k)} = Y - \left(\alpha + \sum_{j \neq k} f_j(x_j)\right)$. (That is, define
 the portion of $Y$ leftover for $f_k(x_k)$ to fit to after the other $f_j$'s have
 had their share.) Then, iteratively fit each of the functions $f_j$ on the
 partial residuals $Y^{(j)}$ until each of the functions converge. For a further
@@ -372,9 +372,14 @@ our models.
 label(path = "figure/time_fit_plot.pdf", 
 caption = "Predicted probabilities of a negative rating by time for a typical ride.
 The rider was chosen so the intercept was closest to the mean intercept for model
-6. The median length and average mean temperature were used, and all other
+5. The median length and average mean temperature were used, and all other
 predictors were set to zero.", 
       label = "model1-time-fit", type = "figure", scale=1,
+options = "tbh")
+label(path = "figure/time_fit_plot_6.pdf", 
+caption = "Predicted probabilities of a negative rating by time for a typical ride,
+for model 6.", 
+      label = "model1-time-fit6", type = "figure", scale=1,
 options = "tbh")
 ```
 
@@ -421,6 +426,23 @@ typical ride.",
       label = "time-pred-plot", type = "figure", scale=1,
 options = "tbh")
 ```
+
+One should be cautious about interpreting the intercepts. It's tempting to say
+they represent a riders general tendency to rate rides negatively, but this is
+ignoring their typical route. Just like how figure `r ref("time-pred-plot")`
+demonstrates that riders have unique patterns of what times of days they take
+rides, riders also likely have very particular routes that make up the majority
+of their rides. Because our models do not take into account the route, the
+intercepts are likely encoding the information about a riders typical route.
+
+The fact that riders have apparent patterns of time of ride (and very likely
+route of ride), indicates there will be some value in trying to differentiate 
+the types of riders that are present in this data. Indeed, one way of looking
+at the range of probabilities of giving a negative rating different riders
+(demonstrated in figure `r ref("rider-pred")`) have is that some are more 
+likely to offer useful information. In the next chapter, we will attempt to
+pick apart different groups of riders, and attempt to characterize their patterns
+of when and how long they ride. 
 
 ```{r rider-predictions, echo=F, results='asis'}
 label(path = "figure/rider_predictions.pdf", 
