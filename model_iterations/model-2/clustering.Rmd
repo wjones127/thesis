@@ -168,12 +168,16 @@ rider_lengths <- cbind(rider_lengths$rider,
 
 pc_length <- prcomp(rider_lengths[,-1], scale = TRUE)
 
-qplot(x = 1:bins, y = pc_length$sdev^2 / sum(pc_length$sdev^2)) + 
+length_scree <- qplot(x = 1:bins, y = pc_length$sdev^2 / sum(pc_length$sdev^2)) + 
   geom_line() + 
-  labs(title = "Scree Plot for Ride Length PCA",
+  labs(title = "Ride Length PCA Scree Plot",
        x = "Principle Component",
-       y = "Proportion of Variance Explained") + 
+       y = "Prop. of Var. Explained") + 
   theme_bw(base_family="CMU Serif")
+
+length_scree
+
+ggsave("plots/length_scree.pdf", width = 4, height = 3)
 
 pc_length_rotation <- data.frame("length" = rownames(pc_length$rotation),
                                  pc_length$rotation) %>%
@@ -181,10 +185,17 @@ pc_length_rotation <- data.frame("length" = rownames(pc_length$rotation),
   select(length, PC1, PC2, PC3, PC4) %>%
   gather(pc, value, -length)
 
-ggplot(pc_length_rotation, aes(x = length, y = value)) + 
+length_loadings <- ggplot(pc_length_rotation, aes(x = length, y = value)) + 
   geom_bar(stat = "identity") + 
-  facet_wrap(~pc, ncol = 2)+ 
-  theme_bw(base_family="CMU Serif")
+  facet_wrap(~pc, ncol = 2)+
+  scale_x_discrete(breaks = NULL) +
+  theme_bw(base_family="CMU Serif") + 
+  labs(title = "Time PCA Loadings",
+       x = "standardized log(length)")
+
+length_loadings
+
+ggsave("plots/length_loadings.pdf", width = 3, height = 2)
 
 rider_lengths_w_pc <- cbind(rider_lengths, pc_length$x)
 
@@ -261,12 +272,52 @@ ggplot(rider_times_representative, aes(x = hour, y = count)) + geom_bar(stat="id
 
 ```
 
+```{r alt-time-pca}
+rider_times2 <- data.frame(rider_times[,1],
+apply(rider_times[,-1], 1, sort, decreasing = TRUE) %>% t()) %>% tbl_df()
 
+rider_times2 <- rider_times2 %>% select(-X21, -X22, -X23)
+
+
+pc2 <- prcomp(rider_times2[,-1], scale=TRUE, retx = TRUE)
+
+
+time_scree <- qplot(x = 1:(ncol(rider_times2)-1), y = pc2$sdev^2 / sum(pc2$sdev^2)) + 
+  geom_line() + 
+  labs(title = "Ride Time PCA Scree Plot",
+       x = "Principle Component",
+       y = "Prop. of Var. Explained") + 
+  theme_bw(base_family="CMU Serif") 
+
+time_scree
+
+ggsave("plots/time_scree.pdf", width = 4, height = 3)
+
+pc_rotation2 <- data.frame("hour" = 1:(ncol(rider_times2)-1), pc2$rotation) %>%
+  tbl_df() %>%
+  select(hour, PC1, PC2, PC3, PC4) %>%
+  gather(pc, value, -hour)
+
+time_loadings <- ggplot(pc_rotation2, aes(x = hour, y = value)) + 
+  geom_bar(stat = "identity") + 
+  facet_wrap(~pc, ncol = 1) +
+    theme_bw(base_family="CMU Serif") +
+  labs(title = "Loadings for First Four Principal Compenents",
+       x = "hour of day") + 
+  scale_x_continuous(breaks = seq(1, 20))
+
+time_loadings
+
+ggsave("plots/time_loadings.pdf", width = 4, height = 4)
+
+rider_times_w_pc2 <- cbind(rider_times2, pc2$x) %>% tbl_df() %>%
+  rename(rider = rider_times...1.)
+```
 # Clustering
 
 ```{r clustering}
 riders_final <- riders %>%
-  left_join(rider_times_w_pc, by = "rider") %>%
+  left_join(rider_times_w_pc2, by = "rider") %>%
   select(rider, count, freq, prop_weekend, PC1, PC2) %>%
   rename(time_pc1 = PC1, time_pc2 = PC2) %>%
   left_join(select(rider_lengths_w_pc, rider, PC1, PC2), by = "rider") %>%
@@ -281,13 +332,34 @@ riders_final$prop_weekend <- scaled_weekend[,1]
 
 clustering <- kmeans(select(riders_final, freq, prop_weekend, time_pc1, time_pc2,
                             length_pc1, length_pc2),
-                     4, nstart = 30)
+                     3, nstart = 30)
 
 riders_final$cluster <- as.factor(clustering$cluster)
 
-qplot(x = time_pc1, y = time_pc2, shape = cluster, data = riders_final)
-qplot(x = length_pc1, y = length_pc2, shape = cluster, data = riders_final)
-qplot(x = freq, y = prop_weekend, shape = cluster, data = riders_final)
+scatter1 <- ggplot(riders_final, aes(x = time_pc1, y = time_pc2, color = cluster)) + 
+  geom_point(size = .6) +
+  theme_bw(base_family="CMU Serif") +
+  labs(x = "Time PC1", y = "Time PC2") +
+  theme(legend.position="top")
+scatter2 <- ggplot(riders_final, aes(x = length_pc1, y = length_pc2, color = cluster)) +
+    geom_point(size = .6) +
+  theme_bw(base_family="CMU Serif") +
+  labs(x = "Length PC1", y = "Length PC2") +
+  theme(legend.position="top")
+scatter3 <- ggplot(riders_final, aes(x = freq, y = prop_weekend, color = cluster)) +
+    geom_point(size = .6) +
+  theme_bw(base_family="CMU Serif") +
+  labs(x = "rides per week", y = "prop. during weekend") +
+  theme(legend.position="top")
+
+scatter1
+scatter2
+scatter3
+
+ggsave("plots/cluster_scatter1.pdf", scatter1, width = 3, height = 3.5)
+ggsave("plots/cluster_scatter2.pdf", scatter2, width = 3, height = 3.5)
+ggsave("plots/cluster_scatter3.pdf", scatter3, width = 3, height = 3.5)
+
 
 test_k <- function(k) {
   clustering <- kmeans(select(riders_final, freq, prop_weekend, time_pc1, time_pc2,
@@ -297,17 +369,45 @@ test_k <- function(k) {
 }
 ss <- sapply(1:8, test_k)
 
-qplot(x = 1:8, y = ss) + geom_line() +
+choice_k <- qplot(x = 1:8, y = ss) + geom_line() +
   labs(title = "Total Within SS by Choice of k",
        x = "k",
-       y = "Total Within SS")
+       y = "Total Within SS") + 
+  theme_bw(base_family="CMU Serif")
+
+choice_k
+
+ggsave("plots/choice_k.pdf", width = 3, height = 2)
+```
+
+
+```{r}
+rides_scaled <- select(riders_final, rider, cluster) %>%
+  right_join(rides_scaled, by = "rider")
+
+cluster_patterns <- rides_scaled %>%
+  filter(weekend == "FALSE") %>%
+ggplot(aes(x = time, y = log_length)) + 
+  stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
+    scale_x_continuous(breaks = c(0, 6, 12, 18, 24),
+                     labels = c("12am", "6am", "12pm", "6pm", "12am")) + 
+  facet_wrap(~cluster) + 
+  scale_fill_gradient(low = "white", high = "black") + 
+  theme_bw(base_family="CMU Serif") + 
+  labs(x = "time of day", y = "log(length)", 
+       title = "Patterns in Ride Length and Time of Day for Clusters")
+
+cluster_patterns
+
+ggsave("plots/cluster_patterns.pdf", cluster_patterns, width = 5, height = 3)
+
 ```
 
 
 
 ## What if we fit models with these clusters?
 
-```{r join-group}
+```{r join-group, eval=FALSE}
 rides_scaled <- left_join(rides_scaled, riders_final, by = "rider")
 ```
 
@@ -342,36 +442,52 @@ model3 <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
 
 
 Let's see how models in STAN do to compare
-```{r stan-models}
+```{r stan-models, eval = FALSE}
 
 rides_complete <- rides_scaled %>% filter(!is.na(stressful))
 
 library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
 #package the data for stan
 data = list(
   num_rides = length(rides_complete$stressful),
   num_cyclists = rides_complete$rider %>% unique() %>% length(),
+  # Ride-level variables
   rating = as.numeric(rides_complete$stressful),
   length = as.numeric(rides_complete$log_length),
-  rider = as.numeric(rides_complete$rider),
+  mean_temp = as.numeric(rides_complete$mean.temp),
+  gust_speed = rides_complete$gust.speed,
+  rainfall = rides_complete$rainfall,
+  rainfall_4h = rides_complete$rainfall.4h,
   cyclist = as.numeric(rides_complete$rider),
-  cyclist_freq = riders_final$freq
+  # Cyclist-level variables
+  cyclist_freq = riders_final$freq,
+  cyclist_weekend = riders_final$prop_weekend,
+  cyclist_time_pc1 = riders_final$time_pc1,
+  cyclist_time_pc2 = riders_final$time_pc2,
+  cyclist_length_pc1 = riders_final$length_pc1,
+  cyclist_length_pc2 = riders_final$length_pc2
 )
 
 #compile the model (takes a minute or so)
 model = rstan::stan_model(file="rider_model1.stan")
 
 #evaluate the model
-sampling_iterations = 1e3 #best to use 1e3 or higher
+sampling_iterations = 2e3 #best to use 1e3 or higher
 out = rstan::sampling(
   object = model
   , data = data
-  , chains = 1
+  , chains = 2
   , iter = sampling_iterations
   , warmup = sampling_iterations/2
   , refresh = sampling_iterations/10 #show an update @ each %10
   , seed = 1
   , init = list(list(beta_length = 0,
+                     sigma_a = 1,
+                     a_beta_0 = 0,
+                     a_beta_freq = 0),
+                list(beta_length = 0,
                      sigma_a = 1,
                      a_beta_0 = 0,
                      a_beta_freq = 0))

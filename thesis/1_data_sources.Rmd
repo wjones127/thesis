@@ -29,7 +29,7 @@ The {#rmd-basics} text after the chapter declaration will allow us to link throu
 # Data Sources {#data-sources}
 
 We combine several data sources to do our analysis. Information about
-individual rides, including the GPS trace, the rider, and timestamp were
+individual rides, including the GPS trace, the rider, and start timestamp were
 provided by Ride Report. Weather data were collected from Weather Underground's
 archive of the KPDX weather station and a Portland Fire Bureau station.
 
@@ -231,9 +231,33 @@ don't expect closer weather stations to be much more informative.
 these two stations.
 
 
-## Road Data
+## Our Predictors
 
-To get road feature data, such as bike lanes and intersection types, we had to
-bring in other data. More on this later. (We may use Open Street Map data and/or
-data from civicapps.org/datasets)
+We combined the ride records with weather data by joining by start datestamp of
+the ride. We will denote our set of ride-level predictors, each of which is a 
+column vector as,
+- $x^\text{length}$, ride length, scaled to have mean 0 and standard deviation of 1
+- $x^\text{rain}$, rainfall during hour of ride, in tenths of inches
+- $x^\text{rain4h}$, rainfall during past four hours before ride, in tenths of inches
+- $x^\text{wind}$, mean wind speed for the day, in miles per hour
+- $x^\text{gust}$, max gust speed for the day, in miles per hour^[Gust speeds are
+the max speeds of winds that are fast, highly variable, and short-term. For METAR
+weather stations, which the KPDX station is, gust speeds report the maximum wind
+speed when there were rapid fluxations in wind speed with at least 10 knots in 
+the difference between the lows and highs.]
+- $x^\text{temp}$, average temperature, in degrees Fahrenheit for the day.
+
+We will often represent this set of predictors as the ride-level predictor 
+matrix $X = (x^\text{length} \; x^\text{rain} \; x^\text{rain4h} \; x^\text{wind} \;
+x^\text{gust}\; x^\text{temp}).$ We also have the predictor $t \in [0, 24]^n$, 
+representing the time of day of the ride, measured by hours since midnight. 
+(Because of it's special role in building our models, we use the simple notation
+of a single letter for it.)
+
+Let $Y_i = 1$ if the $i$th ride received a negative rating, and $Y_i = 0$ if it 
+received a positive rating. Choice of coding which events are 0's and which are
+1's is arbitrary when making logistic regression models, though we made this 
+choice because for the sake of our analysis, negatively rated rides are more
+interesting events. For urban planning applications, they define the areas that
+need attention.
 
