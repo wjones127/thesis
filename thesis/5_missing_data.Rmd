@@ -34,36 +34,66 @@ Going further, could we combine our rating model and nonresponse model into one
 model, such that our predictions for ratings will take into account biases in
 nonresponse?
 
-We attempt to address these two questions in this chapter. The reader should be
-warned, however, that this exploration is cursory. While modeling nonresponse is
-important in understanding the data it is not our main goal here. That being
-said, a more in-depth exploration of nonreponse in the Ride Report app would be
-worthwhile.
-
-
+We attempt to address these two questions in this chapter. The methods we present
+in this chapter could improve inference greatly on this data, but we do have
+concerns about the current quality of the data for which there are no reponses.
+As mentioned in Chapter 1, one big problem with data collection is that rides
+are often misclassified as bike rides when they are actually car rides or rides
+on public transit. We suspect that many of the unrated rides are rides that
+were misclassified as bike rides, and thus were not rated by the rider. (We
+assume that riders don't often go through the effort of correcting the
+classification of rides and know not to rate rides that weren't bike rides.)
+That being said, this issue could potentially be fixed and these methods used
+again in the future.
 
 ## What could possibly go wrong?
 
-Let look at a toy example. Let,
-$$X \sim \text{Normal}(0,1),$$
-$$Y \sim \text{Binomial}(\text{logit}^{-1} (4X)),$$
-$$R \sim \text{Binomial}(0.3 + 0.8 Y).$$
+We focus on the situation we have, where our response variable $y_i$ has 
+missing values. Define the vector $R = (r_1, r_2, \ldots, r_n)$ such that
 
-Now, let $Y_i$ be $NA$ (a missing value) if and only if $R_i = 1$.
+\begin{equation}
+r_i = \left\{ \begin{array}{ll}
+1, & \text{if } y_i \text{ is missing};\\
+0, & \text{if } y_i \text{ is observed};
+\end{array}
+\right.
+\end{equation}
 
-```{r load-packages, echo=FALSE, message=FALSE, results='hide'}
+Rubin classifies missing data into three situations^[@little1987 (page 14)]:
+
+1. **Missing Completely at Random (MCAR)**, where $R$ is independent of $Y$ and
+   the predictors $X$. *i.e.*, $\mathbb{P} (R = 1| Y, X) = \mathbb{P}(R = 1$.)
+2. **Missing at Random (MAR)**, where $R$ is independent of $Y$, but may 
+   depend on $X$, *i.e.* $\mathbb{P} (R = 1 |Y, X) = \mathbb{P} (R = 1 | Y, )$
+3. **Nonignorable, or not MCAR nor MAR**, where $R$ is dependent on $Y$.
+
+We believe that rider ratings may be correlated with nonresponse. One explination:
+riders who have a unpleasant experience on the road, might feel more incentive
+to report their experience on the app than those who had a ride that was
+uneventful. This motivates our exploration of missing data models, though, of
+course, is by no means evidence of nonignorable missing data.
+   
+If missing data is nonignorable, what could go wrong with our models? Let look 
+at a toy example. Define the data set of $n$ observations with $X \in \mathbb{R}^n$,
+$Y \in \{0,1\}^n$, and $R$ defined as before, where
+$$x_i \sim \text{Normal}(0,1),$$
+$$y_i \sim \text{Binomial}(\text{logit}^{-1} (4x_i)),$$
+$$r_i \sim \text{Binomial}(0.3 + 0.4 y_i),$$
+for $i = 1, \ldots, n$.
+
+```{r load-packages, echo=FALSE, message=FALSE, results='hide', warning = FALSE}
 packages <- c("dplyr", "ggplot2", "extrafont", "gridExtra", "lme4")
 sapply(packages, library, character.only = TRUE)
 ```
 
 
-```{r, results='hide', echo = FALSE, cache = TRUE, warning=FALSE}
+```{r, results='hide', echo = FALSE, eval = FALSE, warning=FALSE, message=FALSE}
 invlogit <- function (x) 1 / (1 + exp(-x)) 
 
 n <- 1e4
 x <- rnorm(n, 0, 1)
 y <- rbinom(n, 1, prob = invlogit(4 * x))
-psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.8 * y))
+psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.4 * y))
 df <- data.frame(x, y, psi) %>%
   mutate(y_obs = ifelse(psi == 1, NA, y))
 
@@ -72,7 +102,7 @@ actual_intercept <- coef(actual_model)[1]
 actual_slope <- coef(actual_model)[2]
 
 estimate_slope <- function() {
-  psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.1 * df$y))
+  psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.4 * df$y))
   df$y_obs <- ifelse(psi == 1, NA, df$y)
   model <- glm(y_obs ~ x, data = df, family = binomial)
   coef(model)[2]
@@ -85,7 +115,7 @@ p1 <- qplot(x = slopes) +
   theme_bw(base_family="CMU Serif")
 
 estimate_intercept <- function() {
-  psi <- rbinom(n, 1, prob = invlogit(0.3 - 0.1 * df$y))
+  psi <- rbinom(n, 1, prob = invlogit(0.3 + 0.4 * df$y))
   df$y_obs <- ifelse(psi == 1, NA, df$y)
   model <- glm(y_obs ~ x, data = df, family = binomial)
   coef(model)[1]
@@ -94,7 +124,7 @@ estimate_intercept <- function() {
 intercepts <- replicate(1000, estimate_intercept())
 p2 <- qplot(x = intercepts, bins = 30) + 
   geom_vline(xintercept = 0, linetype = "dashed") + 
-  annotate(geom = "label", y = 75, x = 0.01, label = "Actual Intercept") +
+  annotate(geom = "label", y = 75, x = -0.1, label = "Actual Intercept") +
   theme_bw(base_family="CMU Serif")
 
 missing_model1_estimates <- arrangeGrob(p1, p2, nrow=1)
@@ -102,17 +132,31 @@ missing_model1_estimates <- arrangeGrob(p1, p2, nrow=1)
 ggsave('figure/missing_model1_estimates.pdf', missing_model1_estimates, width=6, height=2.25)
 ```
 
-```{r, echo=F, results='asis'}
-label(path = "figure/missing_model1_estimates.pdf", 
-caption = "Missing response when missingness is correlated with the response
-leads to biased estimates in the complete case model of the intercept, but
-not the slopes. Here, we bootstrapped estimates of the slope and intercept
-with each bootstrapped dataset a different pattern of missing data for the same
-original full data.", 
-label = "missing-model1-estimates", type = "figure", scale=1,
-options = "tbh")
-```
+\begin{figure}[htb]
+\centering
+\includegraphics{figure/missing_model1_estimates.pdf}
+\caption[Simulated example of biased estimates from nonignorable missing data.]{Simulated example of logistic regression fits to a model with nonignorable
+missing response. One data set of size $n = 10^4$ was computed from the toy data model.
+We then recomputed $R$ 1,000 times, each time fitting a simple logistic regression
+model to $Y$ and $X$.}
+\end{figure}
 
+
+If we attempt to fit a logistic regression model to this data, our slopes will
+be unbiased but our estimate of the intercept will be very biased. 
+`r ref("missing-model1-estimates")` shows the results of a simulation, computing
+the slope and intercepts for 1,000 different patterns of missing data for the
+same generated data set generated from our toy data model.
+
+It makes sense that we are underestimating our intercept. The intercept can be
+interpretted as the base rate, and if value of $y_i = 1$ are more likely to be
+ missing, the overall rate we observe will be lower.
+ 
+Clearly, if we have nonignorable missing response, we are in a bad situation. 
+Having missingness depend on $Y$ leads to biased estimates of our intercepts
+when we fit models. But we do have all of our predictors of $y$, with no
+missingness. Could we leverage our understanding of how $X$ predicts $Y$ to
+understand the patterns of missing response?
 
 ## Using Expectation Maximization
 
@@ -120,17 +164,9 @@ We can try to perform the expectation maximization algorithm here, using the
 weighting method proposed by Ibrahim and Lipsitz^[@ibrahim1996]. Let 
 $y_i$ be our binary response and $x_i$ be our predictors. With these we have
 our complete data logistic regression model $f(y_i \;|\; x_i, \beta)$, where
-$\beta$ is a vector of parameters in the complete data model. Now define
+$\beta$ is a vector of parameters in the complete data model.
 
-\begin{equation}
-r_i = \left\{ \begin{array}{ll}
-1, & \text{if } y_i \text{is missing};\\
-0, & \text{if } y_i \text{is observed};
-\end{array}
-\right.
-\end{equation}
-
-for $i = 1, \ldots, n$. We then specify a logistic regression model for missingness
+We then specify a logistic regression model for missingness
 (the $r_i$'s): $f(r_i \;|\; x_i, y_i, \alpha)$, where $\alpha$ is the vector of
 parameters in the missingness model.
 
@@ -142,7 +178,7 @@ then use those estimates to compute $\alpha^{(1)}$.
 For the E-step, we compute weights for each observation with missing response
 
 \begin{equation}
-w_{i\: y_i, (t)} = 
+w_{i\: y_i}^{(t)} = 
 f(y_i \;|\; r_i, x_i, \alpha^{(t)}, \beta^{(t)}) =
 \frac{f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})}{
 \sum_{y_i = 0}^1
@@ -150,7 +186,7 @@ f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})
 }.
 \end{equation}
 
-(For observed responses, $w_{i\: y_i, (t)} = 1$.) We can compute
+(For observed responses, $w_{i\: y_i}^{(t)} = 1$.) We can compute
 $f(y_i \;|\; x_i, \beta^{(t)})$ and $f(r_i \;|\; x_i, y_i, \alpha^{(t)})$ by 
 making use of predictions from regression models. So in \textit{R}, we can
 fit models and use the `predict()` function to get our probabilities from
@@ -161,17 +197,25 @@ and $\beta^{(t + 1)}$, by maximizing
 
 \begin{equation}
 Q(\alpha, \beta \;|\; \alpha^{(t)}, \beta^{(t)}) =
-\sum_{i = 1}^n \sum_{y_i = 0}^{m_i} w_{iy_i, (t)} 
-l(\alpha, \beta; x_i, y_i, r_i).
+\sum_{i = 1}^n \sum_{y_i \in \{0,1\}} w_{iy_i}^{(t)} 
+l(\alpha, \beta | x_i, y_i, r_i).
 \end{equation}
 
 We do this by first by estimating $\beta^{(t + 1)}$ using weighted maximum
 likelihood for the complete data model, and then estimating $\alpha^{(t + 1)}$
-using the same method. The nice things here is we can simply make use of `glm`
-in \textit{R} to do these computations. In order to create the data to fit these
-models, we create an augmented data set where for each observation missing the
-response, we record as two rows for the two possible values and add a column for
-weight.
+using the same method. To maximize $l(\alpha, \beta | x_i, y_i, r_i)$, we 
+maximize the product of their likelihoods,
+$$l(\alpha, \beta | x_i, y_i, r_i) = l(\beta | x_i, y_i) l(\alpha | r_i, x_i, y_i),$$
+which we can maximize by maximize each of the likelihoods separately because
+our estimates of $\alpha$ and $\beta$ are independent. This allows us to use
+any package that can fit models by maximum likelihood estimation using weights
+for the observations, which includes all of the model fitting packages we used
+in Chapter 3.
+
+In order to create the data to fit these
+models, we create an augmented data set where  each observation missing the
+response is recorded as two rows, which represent the two possible values of the
+response, and also contain the weights computed in the E-step.
 
 \begin{figure}[htb]
 \centering
@@ -207,11 +251,14 @@ $y_i$ & $x_i$ & $r_i$ & $w_i$\\
 We repeat the E and M step until the values of $\alpha$ and $\beta$ converge.
 
 As an example, we simulated a dataset from the same model we presented earlier
-of size $10^5$. As shown in `r ref("EM-sim", type = "table")`, the estimate for
+of size $10^4$. Of those observations, 6,252 were missing. 
+As shown in `r ref("EM-sim", type = "table")`, the estimate for
 the intercept in the model that only considers the complete data is way off, but
-the model resulting from the EM algorithm is just as accurate as the model 
+the model resulting from the EM algorithm are nearly as accurate as the model 
 computed fit to the full data (with missing values filled in from the original
-data model.) 
+data model.) The missing data model is also able to get accurate estimates of
+the parameters that define the missing data mechanism, but the estimates are
+quite uncertain.
 
 
 ```{r, eval=FALSE, echo = FALSE, cache = TRUE, eval = FALSE}
@@ -280,13 +327,26 @@ Model & $\hat{\beta}_0$ & $2 \cdot SE_{\hat{\beta}_0}$  &
 $\hat{\beta}_X$ &  $2 \cdot SE_{\hat{\beta}_X}$\\
 \midrule
 Actual & 0 & --- & 4 & ---\\
-Full Data Model & $0.030$ &  $0.021$ & $4.009$ &  $0.052$\\
-Complete Data Model & $-0.543$ & $0.038$ & $4.047$ &  $0.093$\\
-EM Final Model & $-0.017$ & $0.021$ & $4.059$ &  $0.053$\\
+Full Data Model & $-0.009$ &  $0.065$ & $3.881$ &  $0.080$\\
+Complete Data Model & $-0.278$ & $0.106$ & $3.819$ &  $0.259$\\
+EM Final Model & $0.042$ & $0.065$ & $3.814$ &  $0.157$\\
 \bottomrule
 \end{tabular}
 \end{table}
 
+\begin{table}[htb]
+\caption{Estimates for missing data mechanism. \label{tab:EM-sim-missing}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Model & $\hat{\alpha}_0$ & $2 \cdot SE_{\hat{\alpha}_0}$ 
+& $\hat{\alpha}_Y$ &  $2 \cdot SE_{\hat{\alpha}_Y}$\\
+\midrule
+Actual & 0.3 & --- & 0.4 & ---\\
+EM Missing Data Model & $0.263$ & $0.132$ & $0.530$ &  $0.268$\\
+\bottomrule
+\end{tabular}
+\end{table}
 
 ## Creating a Missing Data Model
 
