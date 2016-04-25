@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r packages, echo=FALSE, message = FALSE, warning=FALSE}
-packages <- c("dplyr", "ggplot2", "gamm4")
+packages <- c("dplyr", "ggplot2", "gamm4", "lubridate")
 sapply(packages, library, character.only = TRUE)
 source("prob-var-plot.R")
 source("separation-plot.R")
@@ -97,6 +97,37 @@ rides_scaled$rider <- plyr::mapvalues(rides_scaled$rider,
 ```
 
 
+```{r exploratory-plots}
+rides_scaled <- sample_n(rides_scaled, 10000)
+# Find riders with at least 20 rated rides
+rider_counts <- rides_scaled %>% group_by(rider) %>% summarise(count = n()) %>%
+  filter(count > 20)
+rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
+rides_scaled$r <- is.na(rides_scaled$stressful)
+
+
+qplot(x = log_length, y = r, data = rides_scaled)
+ggplot(aes(x = r, y = mean.temp), data = rides_scaled) + geom_boxplot()
+ggplot(aes(x = r, y = log_length), data = rides_scaled) + geom_boxplot()
+ggplot(aes(x = r, y = ), data = rides_scaled) + geom_boxplot()
+
+
+
+ggplot(rides_scaled, aes(x = time, y = log_length)) + 
+  stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
+    scale_x_continuous(breaks = c(0, 6, 12, 18, 24),
+                     labels = c("12am", "6am", "12pm", "6pm", "12am")) + 
+  facet_wrap(~r) + 
+  scale_fill_gradientn(colors = rainbow(7)) +
+  #scale_fill_gradient(low = "white", high = "black") + 
+  theme_bw(base_family="CMU Serif") + 
+  labs(x = "time of day", y = "log(length)", 
+       title = "Cluster Time and Length Patterns") +
+  theme(axis.text.x=element_text(size=10, angle=50, vjust = 1.05, hjust = 1))
+```
+
+
+
 ```{r gamm-function}
 invlogit <- function (x) { 1 / (1 + exp(-x))}
 # Trying to get predictions that combine smoothers and random intercept. It's hard.
@@ -107,25 +138,22 @@ predict_gamm <- function(model, newdata) {
 }
 ```
 
-```{r EM, eval=FALSE, echo = FALSE, cache = TRUE, eval = FALSE}
-rides_scaled <- sample_n(rides_scaled, 3000)
-# Find riders with at least 20 rated rides
-rider_counts <- rides_scaled %>% group_by(rider) %>% summarise(count = n()) %>%
-  filter(count > 20)
-rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
-rides_scaled$r <- is.na(rides_scaled$stressful)
+```{r EM, eval=FALSE, echo = FALSE, cache = TRUE}
 
 # Get initial estimates of parameters
-model_y <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
+model_y <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed + mean.wind.speed +
                   rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
                 random =~(1|rider),
                 knots=list(time=seq(0, 24, 3)),
                 data = rides_scaled, family = binomial)
 rides_scaled$pred_y <- predict_gamm(model_y, rides_scaled)
-model_r <- gam(r ~ 1 + log_length + mean.temp + gust.speed + rainfall + rainfall.4h +
+model_r <- gam(r ~ 1 + log_length + mean.temp + gust.speed + rainfall + rainfall.4h + mean.wind.speed +
                  s(time, bs = "cc", k=9, by = weekend),
                knots=list(time=seq(0, 24, 3)),
                data = rides_scaled, family = binomial)
+
+init_model_y <- model_y
+init_model_r <- model_r
 
 summary(model_r)
 summary(model_y)
@@ -177,8 +205,34 @@ for (i in 1:50) {
                data = df_augmented, family = binomial,
                weights = df_augmented$weight)
 }
-summary(model_y$gam)
-summary(model_r)
 
-sum((pred_y > 0.5) != df_missing$y)
+summary(init_model_y$gam)
+summary(model_y$gam)
+plot(init_model_y$gam)
+plot(model_y$gam)
+
+summary(init_model_r)
+summary(model_r)
+plot(init_model_r)
+plot(model_r)
+```
+
+
+```{r model-eval}
+rides_complete <- rides_scaled %>% filter(!is.na(stressful))
+sep_plot <- separation_plot(rides_complete$stressful,
+                            predict_gamm(model_y, rides_complete))
+sep_plot
+
+ggsave(sep_plot, file = "missing-plots/em-separation-plot.pdf", width = 4, height = 0.25)
+
+kable(confint(model_y$gam))
+
+kable(confint(model_r))
+kable(confint(init_model_r))
+
+# Compute AUC
+actual <- rides_complete$stressful %>% as.numeric() %>% as.factor()
+pred <- predict_gamm(model_y, rides_complete)
+auc(sensitivity(pred, actual))
 ```
