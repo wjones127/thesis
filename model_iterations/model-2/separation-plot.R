@@ -6,8 +6,8 @@ library(ggplot2)
 #' \code{separation_plot} Create a separation plot based on paper.
 #'
 #' @examples
-#' x <- rnorm(1000, 0, 2000)
-#' y <- rbinom(1000, 1, invlogit(x/1000)) == 1
+#' x <- rnorm(2000, 0, 2000)
+#' y <- rbinom(2000, 1, invlogit(x/1000)) == 1
 #' test_data <- data.frame(x, y)
 #' model <- glm(y ~ x, data = test_data, family = binomial)
 #' test_data$yhat <- predict(model, type = "response")
@@ -20,7 +20,7 @@ separation_plot <- function(data, col.actual, col.probs, min.ink = TRUE, sample 
     select_(col.actual, col.probs) %>%
     rename_(Y = col.actual, Yhat = col.probs)
 
-  if (sample) results <- sample_n(results, 1000)
+  if (sample) results <- sample_n(results, 1000) %>% arrange(Yhat)
 
   expected.true = sum(results$Y)
 
