@@ -20,7 +20,7 @@ separation_plot <- function(data, col.actual, col.probs, min.ink = TRUE, sample 
     select_(col.actual, col.probs) %>%
     rename_(Y = col.actual, Yhat = col.probs)
 
-  if (sample) results <- sample_n(results, 1000)
+  if (sample) results <- sample_n(results, 1000) %>% arrange_(col.probs)
 
   expected.true = sum(results$Y)
 
