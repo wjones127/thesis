@@ -1,3 +1,4 @@
+library(dplyr)
 library(ggplot2)
 
 #' Creates a separation plot for diagnosing logistic regression models.
@@ -12,11 +13,14 @@ library(ggplot2)
 #' test_data$yhat <- predict(model, type = "response")
 #' p <- separation_plot(test_data, "y", "yhat")
 #' p
-separation_plot <- function(data, col.actual, col.probs, min.ink = TRUE) {
+separation_plot <- function(data, col.actual, col.probs, min.ink = TRUE, sample = nrow(data) > 1000) {
+
   results <- data %>%
     arrange_(col.probs) %>%
     select_(col.actual, col.probs) %>%
     rename_(Y = col.actual, Yhat = col.probs)
+
+  if (sample) results <- sample_n(results, 1000)
 
   expected.true = sum(results$Y)
 
