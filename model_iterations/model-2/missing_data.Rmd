@@ -6,10 +6,11 @@ output: html_document
 ---
 
 ```{r packages, echo=FALSE, message = FALSE, warning=FALSE}
-packages <- c("dplyr", "ggplot2", "gamm4", "lubridate")
-sapply(packages, library, character.only = TRUE)
 source("prob-var-plot.R")
 source("separation-plot.R")
+packages <- c("ggplot2", "gamm4", "lubridate", "dplyr", "knitr", "AUC")
+sapply(packages, library, character.only = TRUE)
+filter <- dplyr::filter
 ```
 
 
@@ -65,7 +66,7 @@ rides_final <- rides_final %>%
 rides_final$weekend <- as.factor(wday(rides_final$datetime) %in% c(1, 7))
 
 # Filter out the rides with zero length
-rides_scaled <- rides_final %>% filter(length_meters != 0)
+rides_scaled <- rides_final %>% dplyr::filter(length_meters != 0)
 
 # Scale the variables
 scaled_log_length <- scale(log(rides_scaled$length_meters))
@@ -109,7 +110,7 @@ rides_scaled$r <- is.na(rides_scaled$stressful)
 qplot(x = log_length, y = r, data = rides_scaled)
 ggplot(aes(x = r, y = mean.temp), data = rides_scaled) + geom_boxplot()
 ggplot(aes(x = r, y = log_length), data = rides_scaled) + geom_boxplot()
-ggplot(aes(x = r, y = ), data = rides_scaled) + geom_boxplot()
+#ggplot(aes(x = r, y = ), data = rides_scaled) + geom_boxplot()
 
 
 
@@ -138,7 +139,7 @@ predict_gamm <- function(model, newdata) {
 }
 ```
 
-```{r EM, eval=FALSE, echo = FALSE, cache = TRUE}
+```{r EM, cache = TRUE}
 
 # Get initial estimates of parameters
 model_y <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed + mean.wind.speed +
@@ -168,8 +169,9 @@ rides_missing <- rides_scaled %>%
   filter(r) %>%
   mutate(weight = NA)
 
-for (i in 1:50) {
-  print(AIC(model_y$mer))
+last_aic <- AIC(model_y$mer)
+
+for (i in 1:1000) {
   # get prob of 1
   pred_y <- predict_gamm(model_y, rides_missing)
   
@@ -204,7 +206,16 @@ for (i in 1:50) {
                knots=list(time=seq(0, 24, 3)),
                data = df_augmented, family = binomial,
                weights = df_augmented$weight)
+    current_aic <- AIC(model_y$mer)
+    print(last_aic - current_aic)
+    if ((i > 1) && (last_aic - current_aic < 0.01)) {
+      break
+    }
+    last_aic <- current_aic
 }
+
+
+new_aic <- AIC(model_y$mer)
 
 summary(init_model_y$gam)
 summary(model_y$gam)
@@ -215,23 +226,28 @@ summary(init_model_r)
 summary(model_r)
 plot(init_model_r)
 plot(model_r)
+
+save(model_y, model_r, file = "missing_data_models.RData")
 ```
 
+The new AIC is `r new_aic`. Impressive!
 
 ```{r model-eval}
 rides_complete <- rides_scaled %>% filter(!is.na(stressful))
-sep_plot <- separation_plot(rides_complete$stressful,
-                            predict_gamm(model_y, rides_complete))
+predictions <- data.frame("actual" = rides_complete$stressful,
+                          "pred" = predict_gamm(model_y, rides_complete))
+
+sep_plot <- separation_plot(predictions, "actual", "pred")
 sep_plot
 
-ggsave(sep_plot, file = "missing-plots/em-separation-plot.pdf", width = 4, height = 0.25)
+ggsave(sep_plot, file = "missing_plots/em-separation-plot.pdf", width = 4, height = 0.25)
 
 kable(confint(model_y$gam))
 
-kable(confint(model_r))
-kable(confint(init_model_r))
+#kable(confint(model_r))
+#kable(confint(init_model_r))
 
-# Compute AUC
+## Compute AUC
 actual <- rides_complete$stressful %>% as.numeric() %>% as.factor()
 pred <- predict_gamm(model_y, rides_complete)
 auc(sensitivity(pred, actual))
