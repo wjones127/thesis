@@ -78,14 +78,6 @@ rides_scaled <- rides_scaled %>%
   filter(!is.na(mean.temp) &
          !is.na(rainfall))
 
-# Compute rider average log.length
-rider_avg_lengths <- rides_scaled %>%
-  group_by(rider) %>%
-  summarise(avg_log_length = mean(log_length, na.rm=TRUE))
-
-rides_scaled <- rides_scaled %>%
-  left_join(rider_avg_lengths, by="rider")
-
 
 rides_scaled <- rides_scaled %>%
   mutate(gust.speed = ifelse(is.na(gust.speed), 0, gust.speed))
