@@ -133,17 +133,24 @@ predict_gamm <- function(model, newdata) {
 
 ```{r EM, cache = TRUE}
 
-# Get initial estimates of parameters
-model_y <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed + mean.wind.speed +
+fit_y <- function(data, weights = NULL) {
+  gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed + mean.wind.speed +
                   rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
                 random =~(1|rider),
                 knots=list(time=seq(0, 24, 3)),
-                data = rides_scaled, family = binomial)
-rides_scaled$pred_y <- predict_gamm(model_y, rides_scaled)
-model_r <- gam(r ~ 1 + log_length + mean.temp + gust.speed + rainfall + rainfall.4h + mean.wind.speed +
-                 s(time, bs = "cc", k=9, by = weekend),
+                data = rides_scaled, family = binomial, weights = weights)
+}
+fit_r <- function(data, weights = NULL) {
+  gam(r ~ 1 + log_length + mean.temp + gust.speed + rainfall + rainfall.4h + mean.wind.speed +
+        pred_y +  s(time, bs = "cc", k=9, by = weekend),
                knots=list(time=seq(0, 24, 3)),
-               data = rides_scaled, family = binomial)
+               data = data, family = binomial, weights = weights)
+}
+
+# Get initial estimates of parameters
+model_y <- fit_y(rides_scaled)
+rides_scaled$pred_y <- predict_gamm(model_y, rides_scaled)
+model_r <- fit_r(rides_scaled)
 
 init_model_y <- model_y
 init_model_r <- model_r
@@ -188,16 +195,8 @@ for (i in 1:1000) {
                         mutate(rides_missing,
                                weight = w_y2,
                                stressful = FALSE))
-  model_y <- gamm4(stressful ~ 1 + log_length + mean.temp + gust.speed +
-                  rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
-                random =~(1|rider),
-                knots=list(time=seq(0, 24, 3)),
-                data = df_augmented, family = binomial,  weights = df_augmented$weight)
-  model_r <- gam(r ~ 1 + log_length + mean.temp + gust.speed + rainfall + rainfall.4h +
-                 s(time, bs = "cc", k=9, by = weekend),
-               knots=list(time=seq(0, 24, 3)),
-               data = df_augmented, family = binomial,
-               weights = df_augmented$weight)
+  model_y <- fit_r(df_augmented, weights = df_augmented$weight)
+  model_r <- fit_r(df_augmented, weights = df_augmented$weight)
     current_aic <- AIC(model_y$mer)
     print(last_aic - current_aic)
     if ((i > 1) && (last_aic - current_aic < 0.01)) {
