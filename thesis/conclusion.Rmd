@@ -28,10 +28,84 @@ And here's some other random info: the first paragraph after a chapter title or 
 <!--
 If you feel it necessary to include an appendix, it goes here.
 -->
-<!--
+
 \appendix
 
-# The First Appendix
+# A Code Sample of the EM Algorithm
 
-# The Second Appendix, for Fun
--->
+Despite its attractive features, there are few explicit explination of how to
+actually program the EM algorithm for missing response using weights. The 
+theoretical explination is contained in `r ref("em-algorithm", type="header")`,
+but for the benefit of the reader, we lay out the practical implementation here.
+
+For this example, we present the same code used for the simulation in 
+`r ref("em-algorithm", type="header")`. The data can be simulated with,
+
+```{r, eval = FALSE}
+inv_logit <- function(x) 1 / (1 + exp(-x))
+n <- 1e4
+simulated_data <- data.frame(x = rnorm(n, 0, 1),
+                             y = rbinom(n, 1, probs = inv_logit(0.3 + 0.4 * x)),
+                             r = rbinom(n, 1, probs = inv_logit(-0.4 + 1.2 * y)))
+simulated_data$y <- ifelse(simulated_data$r == 1, NA, simulated_data$y)
+```
+
+For convenience, we define the models once as functions, so we can use them more
+than once.
+
+```{r, eval = FALSE}
+fit_model_r <- function(df) glm(r ~ x + y_pred, data = df, family = binomial)
+fit_model_y <- function(df) glm(y ~ x, data = df, family = binomial)
+```
+
+First, we separate out the portions of the data that are complete and that are
+missing the response. To make our code clear and simple, we make use of the 
+`dplyr` package.
+
+```{r, eval = FALSE}
+data_complete <- simulated_data %>% filter(!is.na(y)) %>% mutate(weight = 1)
+data_missing <- simulated_data %>% filter(is.na(y)) %>% mutate(weight = NA)
+```
+
+We then start the algorithm with our initial guesses at the model for `y` and `r`:
+
+```{r, eval = FALSE}
+model_y <- fit_model_y(data_complete)
+simulated_data$y_pred <- as.numeric(predict(model_y, newdata = simulated_data, type = "response") > 0.5)
+model_r <- fit_model_r(simulated_data)
+
+```
+
+```{r, eval = FALSE}
+for (i in 1:50) {
+  print(model_y$aic)
+  # get prob of 1
+  pred_y <- predict(model_y, newdata = df_missing, type="response")
+  
+  # get prob missing given y
+  pred_r_y1 <- predict(model_r, 
+                       newdata = mutate(df_missing, pred_y = 1), 
+                       type="response")
+  pred_r_y0 <- predict(model_r, 
+                       newdata = mutate(df_missing, pred_y = 0),
+                       type="response")
+  
+  # Make weights
+  denom <- (pred_y * pred_r_y1) + ((1-pred_y) * pred_r_y0)
+  w_y1 <- pred_y * pred_r_y1 / denom
+  w_y2 <- (1-pred_y) * pred_r_y0 / denom
+  
+ # print(pred)
+  df_augmented <- bind_rows(df_complete,
+                        mutate(df_missing,
+                               weight = w_y1, 
+                               y_obs = 1),
+                        mutate(df_missing,
+                               weight = w_y2,
+                               y_obs = 0))
+  model_y <- gam(y_obs ~ x, data = df_augmented, family = binomial,
+               weights = df_augmented$weight)
+  model_r <- gam(psi ~ pred_y + x, data = df_augmented, family = binomial,
+                 weights = df_augmented$weight)
+}
+```

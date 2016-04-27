@@ -106,12 +106,16 @@ in how we incorporate them into our model.
 One approach is to add sinusoidal terms with a period of one day.
  We would be interested in fitting a term,
 
-$$\beta \sin (T x^{\text{time}} + \phi),$$
+$$\beta \sin (T x^{\text{time}} + \phi).$$
 
-where $\beta$ and $\phi$ are coefficients estimated and $T = 2 \pi / d,$ where
-$d$ is the period of one day (24 hours.) This form isn't
-easy to estimate, but we can transform this expression into the sum of two
-trigonometric functions:
+Estimating $\beta$ wouldn't be hard; we can easily estimate coefficents of
+tranformed terms. But it's more difficult to estimate $T$ and $\phi$. Except we
+know that we want to restrict our terms to fitting trends that happen over the
+course of one day, so we can set $T = 2 \pi / d$, where $d$ is 24 hours or some
+fraction of that. 
+
+$\phi$ isn't actually that much of a problem, because we can rewrite this
+function as a sum of two trignometric terms with no phase shift:
 
 \begin{align*}
 \beta \sin (T x + \phi) &= 
@@ -120,8 +124,10 @@ trigonometric functions:
 &= \beta_1 \sin (T x) + \beta_2 \cos (T x),
 \end{align*}
 
-where $\beta_1 = \beta \cos (\phi)$ and $\beta_2 = \sin (\phi).$ To add a little
-more flexibility, we can also add another sinusoidal term with half the period.
+where $\beta_1 = \beta \cos (\phi)$ and $\beta_2 = \sin (\phi).$ At this point,
+we are now just estimating the coefficients of a couple of transformed variables,
+which can easily be done in any package that estimates generalized linear
+regressions.
 
 We also want to take into account that weekday patterns may be different than
 weekend hourly patterns. We also have a variable $X^\text{weekend}$ that
@@ -222,30 +228,33 @@ The log likelihoods and AIC scores, shown in `r ref("modelfits", type = "table")
 corroborate this. Adding time dependency doesn't seem to impact predictive ability.
 We will see later, however, that it gives a fascinating result to interpret.
 
-
+<!--
 \begin{table}[htb]
 \centering
 \caption{Model fit summaries for full-data fittings.\label{tab:modelfits}}
-\begin{tabular}{lm{4in}rr}
+\begin{tabular}{lm{4in}rrr}
 \toprule
-\textbf{Model} & \textbf{Separation Plot} & $\mathcal{L}$ & \textbf{AIC}\\
+\textbf{Model} & \textbf{Separation Plot} & \textbf{$\log (\mathcal{L})$} & \textbf{AIC} &
+\textbf{AUC}$_{\text{CV}}$\footnotemark\\
 \midrule
 Model 1 & \includegraphics{figure/model1-sep.pdf}
-& -4,788 & 9,589\\
+& -4,786 & 9,586 & 0.552\\
 Model 2 & \includegraphics{figure/model2-sep.pdf}
-& -3,971 & 7,956\\
+& -3,971 & 7,957 & 0.797\\
 Model 3 & \includegraphics{figure/model3-sep.pdf}
-& -3,923 & 7,876\\
+& -3,923 & 7,877 & 0.802\\
 Model 4 & \includegraphics{figure/model4-sep.pdf}
-& -3,931 & 7,879\\
+& -3,930 & 7,870 & 0.802\\
 Model 5 & \includegraphics{figure/model5-sep.pdf}
-& -3,928 & 7,877\\
+& -3,928 & 7,878 & 0.803\\
 Model 6 & \includegraphics{figure/model6-sep.pdf}
-& -4,716 & 9,458\\
+& -4,713 & 9,455 & 0.601\\
 \bottomrule
 \end{tabular}
 \end{table}
+\footnotetext{Area under ROC curve estimated with  10-fold cross-validation.}
 
+-->
 
 ```{r separation-plots, echo=F, results='asis', eval=FALSE}
 label(path = "figure/sep_plots.pdf", 
@@ -329,23 +338,26 @@ options = "tbh")
  Regression Term &  Model 1 &  Model 2 &  Model 4 & Model 6\\
 \midrule
 Log(length) & -0.122 & -0.100 & -0.092 & -0.114\\
-& \footnotesize (-0.180, -0.063) & \footnotesize (-0.168, -0.033) & 
-\footnotesize (-0.163, -0.022) & \footnotesize (-0.174, -0.054)\\
-Mean Temp. & 0.042 &  0.071 & 0.071 & 0.059\\
-& \footnotesize (-0.0014, 0.098) & \footnotesize (0.001, 0.141) & 
-\footnotesize (0.000, 0.142)  & \footnotesize (0.002, 0.115)\\
-Gust speed & 0.007 & 0.006 & 0.005 & 0.007\\
-& \footnotesize (-0.0003, 0.014) & \footnotesize (-0.002, 0.013) & 
-\footnotesize (-0.003, 0.013) & \footnotesize (-0.019, 0.027)\\
-Rainfall & 0.008 & 0.012 & 0.008 & 0.004\\
+& \footnotesize (-0.180, -0.063) & \footnotesize (-0.168, -0.032) & 
+\footnotesize (-0.162, -0.022) & \footnotesize (-0.174, -0.054)\\
+Mean Temp. & 0.053 &  0.076 & 0.075 & 0.069\\
+& \footnotesize (-0.0004, 0.110) & \footnotesize (0.005, 0.147) & 
+\footnotesize (0.003, 0.147)  & \footnotesize (0.012, 0.127)\\
+Mean Wind speed & 0.028 & 0.014 & 0.012 & 0.027\\
+& \footnotesize (0.004, 0.052) & \footnotesize (-0.013, 0.041) & 
+\footnotesize (-0.014, 0.039) & \footnotesize (0.002, 0.051)\\
+Gust speed & -0.003 & 0.001 & 0.001 & -0.003\\
+& \footnotesize (-0.015, 0.008) & \footnotesize (-0.012, 0.013) & 
+\footnotesize (-0.012, 0.013) & \footnotesize (-0.014, 0.009)\\
+Rainfall & 0.008 & 0.012 & 0.008 & 0.005\\
 & \footnotesize (-0.015, 0.031) & \footnotesize (-0.015, 0.038) & 
 \footnotesize (-0.019, 0.035) & \footnotesize (-0.019, 0.027)\\
-Rainfall 4-Hour & 0.014 & 0.016 & 0.017 & 0.015\\
-& \footnotesize (0.006, 0.022) & \footnotesize (0.007, 0.025) &
-\footnotesize (0.008, 0.027) & \footnotesize (0.007, 0.023)\\
-Intercept & -2.284 & -3.081 & -3.133 & -2.328\\
-& \footnotesize (-2.443, -2.125) & \footnotesize (-3.392, -2.770) &
-\footnotesize (-3.441, -2.824) & \footnotesize (-2.489, -2.168)\\ 
+Rainfall 4-Hour & 0.013 & 0.016 & 0.017 & 0.014\\
+& \footnotesize (0.005, 0.021) & \footnotesize (0.007, 0.025) &
+\footnotesize (0.008, 0.027) & \footnotesize (0.006, 0.022)\\
+Intercept & -2.2868 & -3.075 & -3.127 & -2.313\\
+& \footnotesize (-2.428, -2.108) & \footnotesize (-3.386, -2.764) &
+\footnotesize (-3.436, -2.818) & \footnotesize (-2.475, -2.151)\\ 
 \bottomrule
 \end{tabular}
 \end{table}
@@ -354,26 +366,22 @@ Intercept & -2.284 & -3.081 & -3.133 & -2.328\\
 our models. 
 <!-- Add more interpretation here soon!!!!!!!! -->
 
-```{r time-fits, echo=F, results='asis'}
-label(path = "figure/time_fit_plot.pdf", 
-caption = "Predicted probabilities of a negative rating by time for a typical ride.
+\begin{figure}[htb]
+\centering
+\includegraphics{figure/time_fit_plot.pdf}
+\includegraphics{figure/time_fit_plot_6.pdf}
+\caption{Predicted probabilities of a negative rating by time for a typical ride.
 The rider was chosen so the intercept was closest to the mean intercept for model
 5. The median length and average mean temperature were used, and all other
-predictors were set to zero.", 
-      label = "model1-time-fit", type = "figure", scale=1,
-options = "tbh")
-label(path = "figure/time_fit_plot_6.pdf", 
-caption = "Predicted probabilities of a negative rating by time for a typical ride,
-for model 6.", 
-      label = "model1-time-fit6", type = "figure", scale=1,
-options = "tbh")
-```
+predictors were set to zero. The dotted lines show $\pm 2$ standard errors from
+the predictions.}
+\end{figure}
 
 
 
 The marginal fits for time of day, shown in `r ref("model1-time-fit")`,
 are predictable. On weekdays, the probability of a negative rating peaks in the
-morning and afternoon, around when we expect rush hour traffic, and on weekends it stays
+afternoon from 4--6 p.m., around when we expect rush hour traffic, and on weekends it stays
 steady throughout the day. While Model 4 and Model 5 give similar fits for time
 of day, Model 3's predictions peak at different times on weekdays and exhibit
 much more variability on weekends. There are two probable reasons for these 

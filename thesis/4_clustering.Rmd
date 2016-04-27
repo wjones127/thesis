@@ -3,7 +3,7 @@ output: pdf_document
 header-includes:
 - \usepackage{graphicx,latexsym}
 - \usepackage{amssymb,amsthm,amsmath}
-- \usepackage{longtable,booktabs,setspace}
+- \usepackage{longtable,booktabs,setspace,array}
 ---
 
 <!--
@@ -46,73 +46,120 @@ random intercept models done by cluster.
 
 ## Characterizing riders
 
-By aggregating observations in the data set, we can compute for each rider:
+We characterized riders based on their rides. Ride Report does not collect data
+about their users besides their rides and email address. We limited our exploration
+to riders that had over 20 rated rides, because we wanted to focus on riders 
+who had been using the app for some time and had an identifiable pattern of rides.
 
-- Frequency of rides, in rides per week
-- Proportion of rides on weekends
-- Patterns in time of day on weekdays
-- Patterns in ride length
-
-The last two are a little vague. How can we compute variables that describe patterns
-of rides? Summary statistics like mean and variance can help, but really don't
-give a great description of rider patterns. What use would mean time of day be?
-Instead, we can transform time of day and length patterns into high dimensional
-variables and then do principle component analysis (PCA) to create summaries
-that best describe those distributions. To maintain some interprebility, we keep
-our PCA analysis for time of day and length patterns separate.
-
-### Characterizing Rider Length and Time Patterns
-We want to extract features from riders' time and length patterns that will 
-define a feature space in which we can easily identify useful clusters of riders.
-There are many ways to identify such features. The approach we will take here
-follows the heuristic of capturing the information in a histogram of each rider's
-time of day pattern.
-
-Define the number of rides in hour $h \in \{0, \ldots, 23\}$ for rider $j$ as
-
-$$n(h,j) = \left|\left\{i \: | \: X^\text{rider}_i = j,
-\lfloor t_i \rfloor = h \right\}\right|$$
-
-(Recall that $t \in [0, 24)^n$, i.e it is measured in hours since
-midnight.)
-
-We can then define the rider time of day matrix as $P$, where
-
-$$P_{ij} = \frac{n(i,j)}{\sum_{h = 0}^{23} n(h,j) }.$$
-
-Now we can ask, what are the principal components of these column vectors?
-
+Cyclists patterns in their rides are complex, particularly their time patterns.
+Computing their mean ride length for weekends was useful, but mean time of day
+for their rides does not capture anything meaningful. So we took care in selecting
+features that distinguished different rider patterns we saw when exploring the
+data and that did not have high covariance. 
 
 \begin{figure}[htb]
 \centering
-\includegraphics[width=.5\textwidth]{figure/time_scree.pdf}\hfill
-\includegraphics[width=.5\textwidth]{figure/length_scree.pdf}
-\caption{Scree plots for time of day and ride length principal component analyses. \label{fig:scree-plots}}
+\includegraphics{figure/time-designations.pdf}
+\caption{These intervals define the time designations we used in clustering. 
+The proportion of each riders rides in each of these time intervals made up three
+of our features.\label{fig:time-splits}}
 \end{figure}
 
+First, we define the collection of cyclist $j$'s rides as $H_j = \{ i | j[i] = j \}$. This
+index set can be partitioned into the rides that occured on the weekend, 
+$H_j^\text{weekend} = \{ i | i \in H_j, x_i^\text{weekend} = 1\}$, and those
+that occurred on weekdays, $H_j^\text{weekday} = H_j \setminus H_j^\text{weekend}$.
+Then we define the following for each rider $j$: 
+frequency of rides^[We define frequency of a cyclist's rides as the number of
+rides divided by the difference between the time of the most recent ride and
+time of the first ride. (Units are arbitrary, because we standardized all of our
+rider-level variables.)] ($u^\text{freq}_j$), proportion of rides on weekdays 
+($u^\text{weekend}_j$), median length of rides on weekends ($u^\text{med.len}_j$)
+and weekends ($u^\text{med.len.w}_j$), variance of ride length on weekdays
+($u^\text{var.len}_j$) and weekdays ($u^\text{var.len.w}_j$), and proportion of
+weekday rides during morning rush ($u^\text{morning}_j$), lunch rush
+($u^\text{lunch}_j$), and evening rush ($u^\text{evening}_j$). The time intervals
+that describe the morning, lunch, and evening rush are shown in `r ref("time-splits")`. 
 
-```{r loadings, echo=F, results="asis"}
-label(path = "figure/time_loadings.pdf", 
-caption = "Loadings of first four principal components for time of day.", 
-      label = "time-loadings", type = "figure", scale=1,
-options = "tbh")
-label(path = "figure/length_loadings.pdf", 
-caption = "Loadings of first four principal components for ride length.", 
-      label = "length-loadings", type = "figure", scale=1,
+Selecting variables for a cluster analysis is difficult, for the reason that 
+many choices about what to use are arbitrary. We have chosen these variables,
+but two important other choices remain: what scales and transformations should
+these variables have? We chose here to transform all variables to be approximately
+gaussian---eliminating the right skew that was present in most of these features
+with log and square root transformions---and standardizing them by subtracting
+their mean and dividing by their standard deviation. Future research may find
+more appropriate ways to select features for clustering, but in our approach
+here we stick to a naive and simple approach to see what we can learn.
+
+With the rider-level predictors in hand, we clustered the riders using the $k$-means
+algorithm, using Euclidean distance as the metric. To choose the number of clusters,
+we assessed the total of the sum of squares within each cluster for different
+values of $k$, shown in `r ref("choosing_k")`, and selected $k = 4$ as the point
+where we thought after which there was little value in more clusters.
+
+```{r choosing_k, echo=F, results="asis"}
+label(path = "figure/choice_k.pdf", 
+caption = "Total within sum of squares of each cluster, by number of clusters ($k$).", 
+      label = "choosing_k", type = "figure", scale=1,
 options = "tbh")
 ```
-
 
 \begin{figure}[htb]
 \centering
 \includegraphics[width=.33\textwidth]{figure/cluster_scatter1.pdf}\hfill
 \includegraphics[width=.33\textwidth]{figure/cluster_scatter2.pdf}\hfill
 \includegraphics[width=.33\textwidth]{figure/cluster_scatter3.pdf}
-\caption{Scatter plots of clustering variables with 3 clusters identified by
-$k$-means clustering.\label{fig:cluster-scatter}}
+\caption{Rider clusters identified by $k$-means clustering. The triangles represent
+the centroids (computed as the mean) of the cluster members. \label{fig:cluster-scatter}}
 \end{figure}
 
+Looking at `r ref("cluster-scatter")`, the clusters split the data into the
+four quadrants of the first two principal components of the rider data. This 
+makes sense, given our scree plot only showed very differences in total within
+sum of squares at $k$ got larger. Despite having failed to identify distinct
+cluters, studying these different groups, can still off some valuable insight
+into how cylists differ in their ride patterns.
 
+`r ref("cluster-patterns")` shows the complex patterns the different groups 
+display. Clusters 1 and 3 seem to be the groups that are the most consistent
+cummuters, but are differtiated the the typical length of their weekend. Clusters
+2 and 4 show much more variance in the timing of their weekdays rides, with
+cluster 2 having more consistent long lengths for their weekend rides. 
+
+
+```{r uniform-test, echo= FALSE, eval=FALSE}
+test_data <- data.frame(x1 = rnorm(1000, 0, 4), x2 = rnorm(1000, 0, 4))
+test_k <- function(k) kmeans(test_data, k, nstart = 100)$tot.withinss
+ss <- sapply(1:8, test_k)
+
+choice_k <- qplot(x = 1:8, y = ss) + geom_line() +
+  labs(title = "Total Within SS by Choice of k",
+       x = "k",
+       y = "Total Within SS") +
+  theme_bw(base_family="CMU Serif")
+
+choice_k
+
+test_data2 <- data.frame(x1 = c(rnorm(800, 1, 1), rnorm(200, -1, 1)),
+                         x2 = c(rnorm(800, 2.7, 1), rnorm(200, -2, 0.8)))
+qplot(data = test_data2, x = x1, y = x2)
+test_k <- function(k) kmeans(test_data2, k, nstart = 100)$tot.withinss
+ss <- sapply(1:8, test_k)
+choice_k <- qplot(x = 1:8, y = ss) + geom_line() +
+  labs(title = "Total Within SS by Choice of k",
+       x = "k",
+       y = "Total Within SS") +
+  theme_bw(base_family="CMU Serif")
+
+choice_k
+```
+
+```{r cluster-patterns, echo=F, results="asis"}
+label(path = "figure/cluster_patterns.pdf", 
+caption = "Patterns of ride length and ride time of day for each cluster..", 
+      label = "cluster-patterns", type = "figure", scale=1,
+options = "bht")
+```
 
 
 
@@ -120,7 +167,7 @@ $k$-means clustering.\label{fig:cluster-scatter}}
 
 ## Models with Rider-level predictors
 
-We now have several variables that differentiate riders. Howe well do they predict
+We now have several variables that differentiate riders. How well do they predict
 our rider intercepts? 
 
 Now let $U_j$ be the vector of rider-level variables. Then our model will be
@@ -145,6 +192,69 @@ splines would have to be coded by hand and we lacked the expertise to write
 the functions to fit smoothing splines ourselves.]
 
 
+
+\begin{table}[htb]
+\caption{Estimates of rider level predictors. \label{tab:rider-level-estimates}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Parameter} & Estimate & 2.5\% percentile & 97.5\% percentile\\
+\midrule
+$\gamma^\text{freq}$ & 0.08 & -0.19 & 0.35\\
+$\gamma^\text{weekend}$ & -0.13 & -0.50 & 0.35\\
+$\gamma^\text{morning}$ & 0.06 & -0.22 & 0.34\\
+$\gamma^\text{afternoon}$ & 0.13 & -0.20 & 0.44\\
+$\gamma^\text{evening}$ & -0.02 & -0.31 & 0.27\\
+$\gamma^\text{med.len}$ & 0.01 & -0.25 & 0.29\\
+$\gamma^\text{med.len.w}$ & 0.08 & -0.19 & 0.36\\
+$\gamma^\text{var.len}$ & 0.07 & -0.15 & 0.31\\
+$\gamma^\text{var.len.w}$ & -0.15 & -0.47 & 0.17\\
+$\gamma_0$ & -2.99 & -3.29 & -2.69\\
+$\sigma_\alpha$ & 1.47 & 1.27 & 1.69\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ride-level predictor coefficients from the fitted model, are unimpressive.
+The variance in the rider intecepts not captured by the predictors, quantified
+with $\sigma_\alpha$, is high. 
+
+
 ## Cluster Intercepts Versus Rider Intercepts
 
-Would our clusters be 
+Do these clusters provide similarly useful information that we got from 
+introducing rider intercepts? Naturally, we expect that a model with cluster
+intercepts will do worse than rider intercepts simply by virtue of less flexibility.
+Having only four different intercepts rather than hundreds doesn't sound like a
+recipe for success. But perhaps there is still a significant benefit. 
+
+There isn't. We computed Model 7, which is identical to Model 4 from the
+previous chapter, but has random intercepts by cluster rather than rider. Model 7
+performed slightly better than Model 6---which only had a fixed intercept---but
+nowhere near as well as Model 4. The separation plots, $\log (\mathcal{L})$,
+AIC, and AUC measures, shown in `r ref("cluster-model-fits", type = "table")`, all demonstrate
+this clearly. 
+
+<!--
+\begin{table}[htb]
+\centering
+\caption{Model fit summaries for fixed intercept, rider random intercept, and
+cluster random intercepts.\label{tab:cluster-model-fits}}
+\begin{tabular}{lm{4in}rrr}
+\toprule
+\textbf{Model} & \textbf{Separation Plot} & \textbf{$\log (\mathcal{L})$} & \textbf{AIC} &
+\textbf{AUC}\footnotemark\\
+\midrule
+Model 4 & \includegraphics{figure/rider-model1-sep.pdf}
+& -4,266 & 8,549 & 0.805\\
+Model 6 & \includegraphics{figure/rider-model0-sep.pdf}
+& -5,089 & 10,205 & 0.597\\
+Model 7 & \includegraphics{figure/rider-model2-sep.pdf}
+& -4,973 & 9,965 & 0.646\\
+\bottomrule
+\end{tabular}
+\end{table}
+\footnotetext{Area under ROC curve for training data.}
+
+-->
+

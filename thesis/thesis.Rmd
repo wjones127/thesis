@@ -3,6 +3,8 @@ author: 'Will Jones'
 date: 'May 2016'
 division: 'Mathematics and Natural Sciences'
 advisor: 'Andrew Bray'
+#altadvisor: 'Your Other Advisor'
+# Delete line 6 if you only have one advisor
 department: 'Mathematics'
 title: 'Hierarchical Models for Crowdsourced Bicycle Route Ratings'
 abstract: >
@@ -13,7 +15,7 @@ abstract: >
 acknowledgements: >
   I want to thank a few people.
 dedication: >
-  I want to thank a few people.
+  You can have a dedication here if you wish. 
 preface: >
   This is an example of a thesis setup to use the reed thesis document class.
 bibliography: bib/thesis.bib
@@ -23,10 +25,16 @@ csl: csl/apa.csl
 output: 
   reedtemplates::reed_thesis:
     toc: true
+    toc_depth: 2
+# Delete the # in line 28 to specify the depth of your table of contents
+# Default is set to 3 (chapter, section, subsection)
 lot: true
 lof: true
+#space_between_paragraphs: true
+# Delete the # at the beginning of the previous line if you'd like
+# to have a blank new line between each paragraph
 header-includes:
-- \usepackage{tikz, dsfont, array}
+- \usepackage{tikz,dsfont,longtable, array}
 ---
 
 <!--
@@ -57,34 +65,33 @@ This is the way to split your thesis into chapters and then include each of the 
 This is an R chunk and chap0.Rmd refers to the Introductory chapter.  Feel free to name this file as something else, but don't forget to change the argument to in `child = ` below!
 -->
 
-```{r intro, child = 'chap0.Rmd'}
+```{r intro, child = '0_intro.Rmd'}
 ```
 
 <!--
 This is for including Chapter 1.  Notice that it's also good practice to name your chunk.  This will help you debug potential issues as you knit.  The chunk above is called intro and the one below is called chapter1.  Feel free to change the name of the Rmd file as you wish, but don't forget to change it here from chap1.Rmd.
 -->
 
-```{r chapter1, child = 'chap1.Rmd'}
+```{r chapter1, child = '1_data_sources.Rmd'}
 ```
 
 <!--
 Immediately below is the chunk for Chapter 2.
 --> 
 
-```{r chapter3, child = 'chap3.Rmd'}
+```{r chapter3, child = '2_methods.Rmd'}
 ```
 
-```{r chapter4, child = 'chap4.Rmd'}
+```{r chapter4, child = '3_ride_models.Rmd'}
 ```
 
-
-```{r chapter6, child = 'chap6.Rmd'}
+```{r chapter6, child = '4_clustering.Rmd'}
 ```
 
-```{r chapter5, child = 'chap5.Rmd'}
+```{r chapter5, child = '5_missing_data.Rmd'}
 ```
 
-```{r chapter7, child = 'chap7.Rmd'}
+```{r chapter7, child = '7_routes.Rmd'}
 ```
 <!--
 Add other chunks here for other chapters in your thesis.  Note that if you use the `child =` parameter, you can't include anything else in your chunk.

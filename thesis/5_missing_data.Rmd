@@ -3,7 +3,7 @@ output: pdf_document
 header-includes:
 - \usepackage{graphicx,latexsym}
 - \usepackage{amssymb,amsthm,amsmath}
-- \usepackage{longtable,booktabs,setspace, dsfont}
+- \usepackage{longtable,booktabs,setspace,dsfont,array}
 ---
 
 <!--
@@ -158,7 +158,7 @@ when we fit models. But we do have all of our predictors of $y$, with no
 missingness. Could we leverage our understanding of how $X$ predicts $Y$ to
 understand the patterns of missing response?
 
-## Using Expectation Maximization
+## Using Expectation Maximization {#em-algorithm}
 
 We can try to perform the expectation maximization algorithm here, using the
 weighting method proposed by Ibrahim and Lipsitz^[@ibrahim1996]. Let 
@@ -326,7 +326,7 @@ standard error.) \label{tab:EM-sim}}
 Model & $\hat{\beta}_0$ & $2 \cdot SE_{\hat{\beta}_0}$  & 
 $\hat{\beta}_X$ &  $2 \cdot SE_{\hat{\beta}_X}$\\
 \midrule
-Actual & 0 & --- & 4 & ---\\
+Actual & 0 & -- & 4 & --\\
 Full Data Model & $-0.009$ &  $0.065$ & $3.881$ &  $0.080$\\
 Complete Data Model & $-0.278$ & $0.106$ & $3.819$ &  $0.259$\\
 EM Final Model & $0.042$ & $0.065$ & $3.814$ &  $0.157$\\
@@ -342,7 +342,7 @@ EM Final Model & $0.042$ & $0.065$ & $3.814$ &  $0.157$\\
 Model & $\hat{\alpha}_0$ & $2 \cdot SE_{\hat{\alpha}_0}$ 
 & $\hat{\alpha}_Y$ &  $2 \cdot SE_{\hat{\alpha}_Y}$\\
 \midrule
-Actual & 0.3 & --- & 0.4 & ---\\
+Actual & 0.3 & -- & 0.4 & --\\
 EM Missing Data Model & $0.263$ & $0.132$ & $0.530$ &  $0.268$\\
 \bottomrule
 \end{tabular}
@@ -350,4 +350,73 @@ EM Missing Data Model & $0.263$ & $0.132$ & $0.530$ &  $0.268$\\
 
 ## Creating a Missing Data Model
 
-Before
+In order to perform the algorithm, we need to specify a model for nonresponse.
+We will the same predictors that we do in Model 4 for ride rating---including
+a smoothing spline for time of day for weekdays and weekends---except
+we do not use random rider intercepts. We can specify a basic nonresponse model as
+
+\begin{equation}
+r_i \sim Bernoulli(\text{logit}^{-1} (\alpha + x_i \beta + \mathcal{S}(t_i))).
+\end{equation}
+
+For the EM algorithm, we use Model 4 as our ride rating model and use the following
+model for the rating nonresponse mechanism:
+
+\begin{equation}
+r_i \sim Bernoulli(\text{logit}^{-1} (\alpha + y_i \beta_Y + x_i \beta + \mathcal{S}(t_i))).
+\end{equation}
+
+<!--
+\begin{table}[htb]
+\centering
+\caption{Comparison of fits of Model 4 and the EM Model\label{tab:em-modelfits}}
+\begin{tabular}{lm{4in}rrr}
+\toprule
+\textbf{Model} & \textbf{Separation Plot} & \textbf{AUC}\footnotemark\\
+\midrule
+Model 4 & \includegraphics{figure/model4-sep.pdf}
+& 0.802\\
+EM Model & \includegraphics{figure/model2-sep.pdf}
+& 0.807\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+-->
+
+
+\begin{table}[htb]
+\caption{Estimates for ride rating nonresponse mechanism. \label{tab:nonresponse-estimates}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Parameter} & \textbf{Basic Nonresponse Model} & \textbf{EM Nonresponse Model}\\
+\midrule
+Log(Length) & -0.377 & -0.365\\
+Mean Temperature & 0.071 & -0.068\\
+Mean Wind Speed & 0.004 & ???\\
+Max Gust Speed & 0.004 & 0.008\\
+Rainfall & -0.002 & -0.003\\
+Rainfall 4-Hour & 0.008 & 0.008\\
+Intercept & 0.072 & -0.060\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htb]
+\caption{Ride rating model estimates after EM algorithm \label{tab:em-model-estimates}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Parameter} & \textbf{Model 4} & \textbf{EM Model}\\
+\midrule
+Log(Length) & -0.196 & \\
+Mean Temperature & 0.100 & \\
+Mean Wind Speed & -0.001 & \\
+Max Gust Speed & 0.006 & \\
+Rainfall & -0.002 & \\
+Rainfall 4-Hour & 0.025 & \\
+Intercept & -2.987 & \\
+\bottomrule
+\end{tabular}
+\end{table}
