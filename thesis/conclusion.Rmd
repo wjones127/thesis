@@ -43,10 +43,12 @@ For this example, we present the same code used for the simulation in
 
 ```{r, eval = FALSE}
 inv_logit <- function(x) 1 / (1 + exp(-x))
-n <- 1e4
-simulated_data <- data.frame(x = rnorm(n, 0, 1),
-                             y = rbinom(n, 1, probs = inv_logit(0.3 + 0.4 * x)),
-                             r = rbinom(n, 1, probs = inv_logit(-0.4 + 1.2 * y)))
+n <- 1e3
+x <- rnorm(n, 0, 1)
+y <- rbinom(n, 1, prob = inv_logit(4 * x))
+r <- rbinom(n, 1, prob = inv_logit(0.3 + 0.4 * y))
+
+simulated_data <- data.frame(x, y, r)
 simulated_data$y <- ifelse(simulated_data$r == 1, NA, simulated_data$y)
 ```
 
@@ -54,8 +56,12 @@ For convenience, we define the models once as functions, so we can use them more
 than once.
 
 ```{r, eval = FALSE}
-fit_model_r <- function(df) glm(r ~ x + y_pred, data = df, family = binomial)
-fit_model_y <- function(df) glm(y ~ x, data = df, family = binomial)
+fit_r <- function(data, weights = NULL) {
+  gam(r ~ x + y_pred, data = data, family = binomial, weights = weights)
+}
+fit_y <- function(data, weights = NULL) {
+  gam(y_pred ~ x, data = data, family = binomial, weights = weights)
+}
 ```
 
 First, we separate out the portions of the data that are complete and that are
@@ -70,42 +76,56 @@ data_missing <- simulated_data %>% filter(is.na(y)) %>% mutate(weight = NA)
 We then start the algorithm with our initial guesses at the model for `y` and `r`:
 
 ```{r, eval = FALSE}
+simulated_data$y_pred <- simulated_data$y
 model_y <- fit_model_y(data_complete)
-simulated_data$y_pred <- as.numeric(predict(model_y, newdata = simulated_data, type = "response") > 0.5)
+simulated_data$y_pred <- (predict(model_y,
+                                  newdata = simulated_data,
+                                  type = "response") > 0.5) %>% as.numeric()
 model_r <- fit_model_r(simulated_data)
-
 ```
 
+Then we start the main EM algorithm iterations. We have two stopping conditions
+here: when the algorithm reaches the maximum number of iterations or when the 
+difference between the current model's loglikelihood and the previous model's
+is less than the tolerance. 
+
 ```{r, eval = FALSE}
-for (i in 1:50) {
-  print(model_y$aic)
+last_aic <- AIC(model_y)
+
+for (i in 1:1000) {
   # get prob of 1
-  pred_y <- predict(model_y, newdata = df_missing, type="response")
+  y_pred <- predict(model_y, newdata = data_missing, type="response")
   
   # get prob missing given y
   pred_r_y1 <- predict(model_r, 
-                       newdata = mutate(df_missing, pred_y = 1), 
+                       newdata = mutate(data_missing, y_pred = 1), 
                        type="response")
   pred_r_y0 <- predict(model_r, 
-                       newdata = mutate(df_missing, pred_y = 0),
+                       newdata = mutate(data_missing, y_pred = 0),
                        type="response")
   
   # Make weights
-  denom <- (pred_y * pred_r_y1) + ((1-pred_y) * pred_r_y0)
-  w_y1 <- pred_y * pred_r_y1 / denom
-  w_y2 <- (1-pred_y) * pred_r_y0 / denom
+  denom <- (y_pred * pred_r_y1) + ((1-y_pred) * pred_r_y0)
+  w_y1 <- y_pred * pred_r_y1 / denom
+  w_y2 <- (1-y_pred) * pred_r_y0 / denom
   
  # print(pred)
-  df_augmented <- bind_rows(df_complete,
-                        mutate(df_missing,
+  data_augmented <- bind_rows(data_complete,
+                        mutate(data_missing,
                                weight = w_y1, 
-                               y_obs = 1),
-                        mutate(df_missing,
+                               y_pred = 1),
+                        mutate(data_missing,
                                weight = w_y2,
-                               y_obs = 0))
-  model_y <- gam(y_obs ~ x, data = df_augmented, family = binomial,
-               weights = df_augmented$weight)
-  model_r <- gam(psi ~ pred_y + x, data = df_augmented, family = binomial,
-                 weights = df_augmented$weight)
+                               y_pred = 0))
+  model_y <- fit_y(data_augmented,
+                         data_augmented$weight)
+  model_r <- fit_r(data_augmented,
+                         data_augmented$weight)
+  
+  # Check Stopping Condition
+  current_aic <- AIC(model_y)
+  print(AIC(model_y))
+  if ((i > 1) && (last_aic - current_aic < 0.0001)) break
+  last_aic <- current_aic
 }
 ```
