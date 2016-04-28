@@ -7,17 +7,14 @@ advisor: 'Andrew Bray'
 # Delete line 6 if you only have one advisor
 department: 'Mathematics'
 title: 'Hierarchical Models for Crowdsourced Bicycle Route Ratings'
-abstract: >
-  `r paste(readLines('abstract.Rmd'), collapse = '\n')`
-# If you'd rather include the preliminary content in files instead of inline
-# like below, use a command like that for the abstract above.  Note that a tab is 
-# needed on the line after the >.
-acknowledgements: >
-  I want to thank a few people.
-dedication: >
-  You can have a dedication here if you wish. 
-preface: >
-  This is an example of a thesis setup to use the reed thesis document class.
+abstract: |
+  `r paste(readLines('abstract.Rmd'), collapse = ' ')`
+acknowledgements: |
+  `r paste(readLines('acknowledgements.Rmd'), collapse = ' ')`
+dedication: |
+  Dedicated to Hudson.
+preface: |
+  `r paste(readLines('preface.Rmd'), collapse = ' ')`
 bibliography: bib/thesis.bib
 # Download your specific bibliography database file and refer to it in the line above.
 csl: csl/apa.csl
@@ -34,7 +31,7 @@ lof: true
 # Delete the # at the beginning of the previous line if you'd like
 # to have a blank new line between each paragraph
 header-includes:
-- \usepackage{tikz,dsfont,longtable, array}
+- \usepackage{tikz,dsfont,longtable,array}
 ---
 
 <!--
