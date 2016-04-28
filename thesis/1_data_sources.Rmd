@@ -59,14 +59,14 @@ wishing to improve bike infrastructure.]
 Ride Report's approach to crowdsourcing this data is particularcly important
 to understand. The app automates every piece of the data collection process 
 except for the rating given by the rider. Thus, the app casts aside nuanced 
-and (somewhat) reliable human input in favor of increasing sample size (i.e.
+and (somewhat) reliable human input in favor of increasing sample size:
 one could imagine a similar app where users have more control over how the
 route is recorded, have the ability to rate on a more fine-grained scale, and
-are given more direction in what they are rating for.) This leads to some 
-potential issues that we need to address in our models.
+are given more direction in what they are rating for. This tradeoff causes two
+problems with the reliability with the data.
 
 <!-- how does it work? -->
-Before we get into the potential issues in the data collection, let's examine
+Before we get into the potential issues in the data collection, though, let's examine
 the data collection process itself. When installed on a persons phone, the 
 Ride Report app attempts to automatically detect when
 the user starts riding their bicycle, based acceleromoter data, when a user
@@ -84,16 +84,15 @@ common errors in the dataset: first, one ride is often split into two or more
 rides at points, such as at a stoplight or a train crossing, where a cyclist
 stops for an extended period of time; second, car rides are sometimes
 misclassified as bicycle rides and vice-versa (car rides are not rated.) The
-app does allow riders to correct the misclassification, but there is currently
-no way to join split rides back together (Knock is working on changing that, 
-though.)
+app allows riders to correct the misclassification, but provides
+no way to join split rides back together.
 
 ```{r, echo=F, message=F, results='asis'}
 label(path = "figure/ride_report_rating.jpg", 
 caption = "The Ride Report app's interface has changed significantly between
 versions, including the rating text displayed after a ride. This is the current
 version as of Februrary 2015.", 
-      label = "ride-rating", type = "figure", scale=.35,
+      label = "ride-rating", type = "figure", scale=.2,
 options = "tbh")
 ```
 
@@ -102,7 +101,7 @@ changes in the course of it's life. In particular, while the ratings have always
 been binary, the labels have changed at various points in time. For a while the
 rating labels were "Stressful" and "Chill", while now they are labelled 
 "Recommend" and "Avoid" (see `r ref("ride-rating", type="figure")`.) Other 
-fundamentals of the data collection process, have remained constant, however.
+fundamentals of the data collection process, have remained constant.
 
 <!-- who do the rides represent? -->
 The data colletion method itself has some problems, but there also may be some
@@ -186,12 +185,12 @@ portland_map <- get_map("portland, oregon",
                         zoom=12)
 weather_station_map <- ggmap(portland_map) + 
   geom_point(aes(x = long, y = lat), data = weather_stations) + 
-  geom_label(aes(x = long, y = lat, label = label), 
+  geom_label(aes(x = long - 0.03, y = lat - 0.005, label = label), 
              data = weather_stations,
              nudge_y = -0.007) +
   labs(x = "longitude", y = "latitude")
 
-ggsave("figure/weather_station_map.pdf", weather_station_map)
+ggsave("figure/weather_station_map.pdf", weather_station_map, width = 4.5, height = 3.5)
 
 label(path = "figure/weather_station_map.pdf", 
 caption = "Positions of weather data collection sites. Daily weather information
@@ -231,7 +230,7 @@ don't expect closer weather stations to be much more informative.
 these two stations.
 
 
-## Our Predictors
+## Notation for the Joined Data Set {#data-notation}
 
 We combined the ride records with weather data by joining by start datestamp of
 the ride. We will denote our set of ride-level predictors, each of which is a 

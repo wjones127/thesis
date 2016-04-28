@@ -25,7 +25,7 @@ library(reedtemplates)
 ```
 
 
-# Modeling Missing Response
+# Modeling Missing Response {#missing-data}
 
 We have a significant portion of observations with no response. But we do have
 all the predictors for every observation. So just as we built a model to predict
@@ -64,21 +64,21 @@ Rubin classifies missing data into three situations^[@little1987 (page 14)]:
 1. **Missing Completely at Random (MCAR)**, where $R$ is independent of $Y$ and
    the predictors $X$. *i.e.*, $\mathbb{P} (R = 1| Y, X) = \mathbb{P}(R = 1$.)
 2. **Missing at Random (MAR)**, where $R$ is independent of $Y$, but may 
-   depend on $X$, *i.e.* $\mathbb{P} (R = 1 |Y, X) = \mathbb{P} (R = 1 | Y, )$
+   depend on $X$, *i.e.* $\mathbb{P} (R = 1 |Y, X) = \mathbb{P} (R = 1 | X )$
 3. **Nonignorable, or not MCAR nor MAR**, where $R$ is dependent on $Y$.
 
-We believe that rider ratings may be correlated with nonresponse. One explination:
-riders who have a unpleasant experience on the road, might feel more incentive
+We believe that rider ratings may be correlated with nonresponse. One explanation:
+riders who have a unpleasant experience on the road might feel more incentive
 to report their experience on the app than those who had a ride that was
 uneventful. This motivates our exploration of missing data models, though, of
 course, is by no means evidence of nonignorable missing data.
    
 If missing data is nonignorable, what could go wrong with our models? Let look 
-at a toy example. Define the data set of $n$ observations with $X \in \mathbb{R}^n$,
-$Y \in \{0,1\}^n$, and $R$ defined as before, where
+at a toy example. Define the data set of $n$ observations with $x \in \mathbb{R}^n$,
+$y \in \{0,1\}^n$, and $R$ defined as before, where
 $$x_i \sim \text{Normal}(0,1),$$
-$$y_i \sim \text{Binomial}(\text{logit}^{-1} (4x_i)),$$
-$$r_i \sim \text{Binomial}(0.3 + 0.4 y_i),$$
+$$y_i \sim \text{Bernoulli}(\text{logit}^{-1} (4x_i)),$$
+$$r_i \sim \text{Bernoulli}(0.3 + 0.4 y_i),$$
 for $i = 1, \ldots, n$.
 
 ```{r load-packages, echo=FALSE, message=FALSE, results='hide', warning = FALSE}
@@ -138,18 +138,18 @@ ggsave('figure/missing_model1_estimates.pdf', missing_model1_estimates, width=6,
 \caption[Simulated example of biased estimates from nonignorable missing data.]{Simulated example of logistic regression fits to a model with nonignorable
 missing response. One data set of size $n = 10^4$ was computed from the toy data model.
 We then recomputed $R$ 1,000 times, each time fitting a simple logistic regression
-model to $Y$ and $X$.}
+model to $Y$ and $X$. \label{fig:missing-model1-estimates}}
 \end{figure}
 
 
 If we attempt to fit a logistic regression model to this data, our slopes will
-be unbiased but our estimate of the intercept will be very biased. 
+be unbiased but our estimate of the intercept will be biased. 
 `r ref("missing-model1-estimates")` shows the results of a simulation, computing
 the slope and intercepts for 1,000 different patterns of missing data for the
 same generated data set generated from our toy data model.
 
 It makes sense that we are underestimating our intercept. The intercept can be
-interpretted as the base rate, and if value of $y_i = 1$ are more likely to be
+interpreted as the base rate, and if values of $y_i = 1$ are more likely to be
  missing, the overall rate we observe will be lower.
  
 Clearly, if we have nonignorable missing response, we are in a bad situation. 
@@ -158,9 +158,9 @@ when we fit models. But we do have all of our predictors of $y$, with no
 missingness. Could we leverage our understanding of how $X$ predicts $Y$ to
 understand the patterns of missing response?
 
-## Using Expectation Maximization {#em-algorithm}
+## Modeling the Missing Data Mechanism with Expectation Maximization {#em-algorithm}
 
-We can try to perform the expectation maximization algorithm here, using the
+Here we perform the expectation maximization algorithm using the
 weighting method proposed by Ibrahim and Lipsitz^[@ibrahim1996]. Let 
 $y_i$ be our binary response and $x_i$ be our predictors. With these we have
 our complete data logistic regression model $f(y_i \;|\; x_i, \beta)$, where
@@ -181,12 +181,13 @@ For the E-step, we compute weights for each observation with missing response
 w_{i\: y_i}^{(t)} = 
 f(y_i \;|\; r_i, x_i, \alpha^{(t)}, \beta^{(t)}) =
 \frac{f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})}{
-\sum_{y_i = 0}^1
+\sum_{y_i \in \{0,1\}}
 f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})
 }.
 \end{equation}
 
-(For observed responses, $w_{i\: y_i}^{(t)} = 1$.) We can compute
+For observed responses, $w_{i\: y_i}^{(t)} = 1$. Note that for each observation 
+$i$, $\sum_{y_i \in \{0,1\}} w_{i\; y_i} = 1.$  We can compute
 $f(y_i \;|\; x_i, \beta^{(t)})$ and $f(r_i \;|\; x_i, y_i, \alpha^{(t)})$ by 
 making use of predictions from regression models. So in \textit{R}, we can
 fit models and use the `predict()` function to get our probabilities from
@@ -197,7 +198,7 @@ and $\beta^{(t + 1)}$, by maximizing
 
 \begin{equation}
 Q(\alpha, \beta \;|\; \alpha^{(t)}, \beta^{(t)}) =
-\sum_{i = 1}^n \sum_{y_i \in \{0,1\}} w_{iy_i}^{(t)} 
+\sum_{i = 1}^n \sum_{y_i \in \{0,1\}} w_{iy_i}^{(t)} \cdot 
 l(\alpha, \beta | x_i, y_i, r_i).
 \end{equation}
 
@@ -207,15 +208,17 @@ using the same method. To maximize $l(\alpha, \beta | x_i, y_i, r_i)$, we
 maximize the product of their likelihoods,
 $$l(\alpha, \beta | x_i, y_i, r_i) = l(\beta | x_i, y_i) l(\alpha | r_i, x_i, y_i),$$
 which we can maximize by maximize each of the likelihoods separately because
-our estimates of $\alpha$ and $\beta$ are independent. This allows us to use
+our estimates of $\alpha$ and $\beta$ are only dependent on each other through
+$x$ and $y$. This allows us to use
 any package that can fit models by maximum likelihood estimation using weights
 for the observations, which includes all of the model fitting packages we used
 in Chapter 3.
 
 In order to create the data to fit these
 models, we create an augmented data set where  each observation missing the
-response is recorded as two rows, which represent the two possible values of the
-response, and also contain the weights computed in the E-step.
+response is recorded as two rows. These duplicate rows represent the two possible
+values of the response, and also contain the weights computed in the E-step.
+`r ref("augmented-data")` describes this process graphically.
 
 \begin{figure}[htb]
 \centering
@@ -356,14 +359,14 @@ a smoothing spline for time of day for weekdays and weekends---except
 we do not use random rider intercepts. We can specify a basic nonresponse model as
 
 \begin{equation}
-r_i \sim Bernoulli(\text{logit}^{-1} (\alpha + x_i \beta + \mathcal{S}(t_i))).
+r_i \sim \text{Bernoulli}(\text{logit}^{-1} (\alpha + x_i \beta + \mathcal{S}(t_i))).
 \end{equation}
 
 For the EM algorithm, we use Model 4 as our ride rating model and use the following
 model for the rating nonresponse mechanism:
 
 \begin{equation}
-r_i \sim Bernoulli(\text{logit}^{-1} (\alpha + y_i \beta_Y + x_i \beta + \mathcal{S}(t_i))).
+r_i \sim \text{Bernoulli}(\text{logit}^{-1} (\alpha + y_i \beta_Y + x_i \beta + \mathcal{S}(t_i))).
 \end{equation}
 
 <!--
@@ -384,6 +387,7 @@ EM Model & \includegraphics{figure/model2-sep.pdf}
 
 -->
 
+## EM Model Results
 
 \begin{table}[htb]
 \caption{Estimates for ride rating nonresponse mechanism. \label{tab:nonresponse-estimates}}
@@ -392,13 +396,22 @@ EM Model & \includegraphics{figure/model2-sep.pdf}
 \toprule
 \textbf{Parameter} & \textbf{Basic Nonresponse Model} & \textbf{EM Nonresponse Model}\\
 \midrule
-Log(Length) & -0.377 & -0.365\\
-Mean Temperature & 0.071 & -0.068\\
-Mean Wind Speed & 0.004 & ???\\
-Max Gust Speed & 0.004 & 0.008\\
-Rainfall & -0.002 & -0.003\\
-Rainfall 4-Hour & 0.008 & 0.008\\
-Intercept & 0.072 & -0.060\\
+$y$ & 0.730 & 1.035\\
+& \footnotesize (0.235, 1.224) & \footnotesize (0.493, 1.577) \\
+Log(Length) & -0.297 & -0.327\\
+& \footnotesize (-0.362, -0.232) & \footnotesize (-1.163, -0.771)\\
+Mean Temperature & 0.200 & 0.139\\
+& \footnotesize (0.139, 0.262) & \footnotesize (0.077, -0.262)\\
+Mean Wind Speed & 0.032 & 0.031\\
+& \footnotesize (0.003, 0.060) & \footnotesize (0.001, 0.061) \\
+Max Gust Speed & -0.003 & -0.007\\
+& \footnotesize (-0.016, 0.010) & \footnotesize (-0.021, 0.006) \\
+Rainfall & 0.007 & -0.024\\
+& \footnotesize (-0.028, 0.041) & \footnotesize (-0.057, 0.009)\\
+Rainfall 4-Hour & -0.002 & 0.010\\
+& \footnotesize (-0.012, 0.009) & \footnotesize (-0.001, 0.021) \\
+Intercept & -0.927 & -0.967\\
+& \footnotesize (-1.124, -0.729) & \footnotesize (-1.163, -0.771)\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -410,13 +423,20 @@ Intercept & 0.072 & -0.060\\
 \toprule
 \textbf{Parameter} & \textbf{Model 4} & \textbf{EM Model}\\
 \midrule
-Log(Length) & -0.196 & \\
-Mean Temperature & 0.100 & \\
-Mean Wind Speed & -0.001 & \\
-Max Gust Speed & 0.006 & \\
-Rainfall & -0.002 & \\
-Rainfall 4-Hour & 0.025 & \\
-Intercept & -2.987 & \\
+Log(Length) & -0.147 & 0.205\\
+& \footnotesize (-0.290, -0.005) & \footnotesize (-3.603, -2.684)\\
+Mean Temperature & 0.142 & 0.100\\
+& \footnotesize (0.004, 0.281) & \footnotesize (0.005, 0.196)\\
+Mean Wind Speed & 0.002 & -0.026\\
+& \footnotesize (-0.054, 0.057) & \footnotesize (-0.069, 0.016)\\
+Max Gust Speed & -0.005 & 0.020\\
+& \footnotesize (-0.031, 0.021) & \footnotesize (0.001, 0.039)\\
+Rainfall & 0.050 & 0.051\\
+& \footnotesize (-0.017, 0.117) & \footnotesize (0.009, 0.093)\\
+Rainfall 4-Hour & 0.022 & 0.017\\
+& \footnotesize (0.003, 0.041) & \footnotesize (0.003, 0.030)\\
+Intercept & -2.792 & -3.144\\
+& \footnotesize (-3.334, -2.250) & \footnotesize (-3.604, -2.684)\\
 \bottomrule
 \end{tabular}
 \end{table}

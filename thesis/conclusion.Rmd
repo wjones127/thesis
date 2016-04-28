@@ -31,7 +31,7 @@ If you feel it necessary to include an appendix, it goes here.
 
 \appendix
 
-# A Code Sample of the EM Algorithm
+# A Code Sample of the EM Algorithm {#em-implementation}
 
 Despite its attractive features, there are few explicit explination of how to
 actually program the EM algorithm for missing response using weights. The 

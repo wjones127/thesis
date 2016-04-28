@@ -25,37 +25,36 @@ library(reedtemplates)
 ```
 
 
-# Classifying Riders
+# Characterizing Riders
 
 Given the results from last chapter, there is a clear need to understand what
-kinds of riders are in this data set. Ride Report, because they need to respect
+kinds of riders are in this data set. To do that, we identify predictors 
+that differentiate types of riders and then use these variables
+to identify clusters of riders. We assess how these predictors do as rider-level 
+predictors for the rider intercepts. 
+
+We also compare random intercepts with riders to random intercept models 
+done by cluster. Ride Report, because they need to respect
 the privacy of their users, cannot identify individual riders in the data they
 provide to clients, yet our model results show that differentiating riders is
-crucial to getting good estimates in our models. However, there is one potential
-solution to this problem: If we can identify clusters of riders in the data set
+crucial to getting good estimates in our models. If we can identify clusters of 
+riders in the data set
 that give us nearly the same information as grouping by individuals did, these
 could be provided by Ride Report without nearly the same level of risks to
 user privacy as identifying individual riders.
 
-In this chapter, we identify predictors that differentiate types of riders and 
-then use these variables
-to identify clusters of riders. To tie these predictors into our model, we
-test to see how these predictors do as rider-level predictors for the intercepts
-and even some coefficients. We also compare random intercepts with riders to
-random intercept models done by cluster.
+## Extracting Features and Determining Clusters
 
-## Characterizing riders
-
-We characterized riders based on their rides. Ride Report does not collect data
+We characterized riders based on their rides because Ride Report does not collect data
 about their users besides their rides and email address. We limited our exploration
-to riders that had over 20 rated rides, because we wanted to focus on riders 
+to riders that had over 20 rated rides, in order to focus on riders 
 who had been using the app for some time and had an identifiable pattern of rides.
 
 Cyclists patterns in their rides are complex, particularly their time patterns.
 Computing their mean ride length for weekends was useful, but mean time of day
 for their rides does not capture anything meaningful. So we took care in selecting
 features that distinguished different rider patterns we saw when exploring the
-data and that did not have high covariance. 
+data.
 
 \begin{figure}[htb]
 \centering
@@ -74,9 +73,9 @@ frequency of rides^[We define frequency of a cyclist's rides as the number of
 rides divided by the difference between the time of the most recent ride and
 time of the first ride. (Units are arbitrary, because we standardized all of our
 rider-level variables.)] ($u^\text{freq}_j$), proportion of rides on weekdays 
-($u^\text{weekend}_j$), median length of rides on weekends ($u^\text{med.len}_j$)
+($u^\text{weekend}_j$), median length of rides on weekdays ($u^\text{med.len}_j$)
 and weekends ($u^\text{med.len.w}_j$), variance of ride length on weekdays
-($u^\text{var.len}_j$) and weekdays ($u^\text{var.len.w}_j$), and proportion of
+($u^\text{var.len}_j$) and weekends ($u^\text{var.len.w}_j$), and proportion of
 weekday rides during morning rush ($u^\text{morning}_j$), lunch rush
 ($u^\text{lunch}_j$), and evening rush ($u^\text{evening}_j$). The time intervals
 that describe the morning, lunch, and evening rush are shown in `r ref("time-splits")`. 
@@ -86,16 +85,16 @@ many choices about what to use are arbitrary. We have chosen these variables,
 but two important other choices remain: what scales and transformations should
 these variables have? We chose here to transform all variables to be approximately
 gaussian---eliminating the right skew that was present in most of these features
-with log and square root transformions---and standardizing them by subtracting
+with log and square root transformations---and standardizing them by subtracting
 their mean and dividing by their standard deviation. Future research may find
 more appropriate ways to select features for clustering, but in our approach
 here we stick to a naive and simple approach to see what we can learn.
 
-With the rider-level predictors in hand, we clustered the riders using the $k$-means
-algorithm, using Euclidean distance as the metric. To choose the number of clusters,
+With the rider-level predictors in hand, we clustered the riders using  $k$-means
+clustering. To choose the number of clusters,
 we assessed the total of the sum of squares within each cluster for different
 values of $k$, shown in `r ref("choosing_k")`, and selected $k = 4$ as the point
-where we thought after which there was little value in more clusters.
+where we thought after which there was little value in having more clusters.
 
 ```{r choosing_k, echo=F, results="asis"}
 label(path = "figure/choice_k.pdf", 
@@ -115,16 +114,25 @@ the centroids (computed as the mean) of the cluster members. \label{fig:cluster-
 
 Looking at `r ref("cluster-scatter")`, the clusters split the data into the
 four quadrants of the first two principal components of the rider data. This 
-makes sense, given our scree plot only showed very differences in total within
-sum of squares at $k$ got larger. Despite having failed to identify distinct
-cluters, studying these different groups, can still off some valuable insight
+makes sense, given `r ref("choosing_k")` only showed small reductions in total within
+sum of squares as $k$ got larger. Despite having failed to identify distinct
+clusters, studying these different groups still offers some valuable insight
 into how cylists differ in their ride patterns.
 
-`r ref("cluster-patterns")` shows the complex patterns the different groups 
-display. Clusters 1 and 3 seem to be the groups that are the most consistent
-cummuters, but are differtiated the the typical length of their weekend. Clusters
-2 and 4 show much more variance in the timing of their weekdays rides, with
-cluster 2 having more consistent long lengths for their weekend rides. 
+```{r cluster-patterns, echo=F, results="asis"}
+label(path = "figure/cluster_patterns.pdf", 
+caption = "Patterns of ride length and ride time of day for each cluster..", 
+      label = "cluster-patterns", type = "figure", scale=1,
+options = "bht")
+```
+
+If we look at the length and time patterns of the clusters, shown in 
+`r ref("cluster-patterns")`, it's clear that these aggregate patterns give some
+distinct characterizations.
+Clusters 1 and 3 seem to be the groups that are the most consistent
+commuters, but are differentiated by the typical length of their weekend rides.
+Clusters 2 and 4 show much more variance in the timing of their weekday rides, with
+cluster 2 having more consistently long weekend rides. 
 
 
 ```{r uniform-test, echo= FALSE, eval=FALSE}
@@ -154,23 +162,16 @@ choice_k <- qplot(x = 1:8, y = ss) + geom_line() +
 choice_k
 ```
 
-```{r cluster-patterns, echo=F, results="asis"}
-label(path = "figure/cluster_patterns.pdf", 
-caption = "Patterns of ride length and ride time of day for each cluster..", 
-      label = "cluster-patterns", type = "figure", scale=1,
-options = "bht")
-```
 
 
 
 
 
-## Models with Rider-level predictors
+## Models with Rider-Level Predictors {#stan-model}
 
-We now have several variables that differentiate riders. How well do they predict
-our rider intercepts? 
-
-Now let $U_j$ be the vector of rider-level variables. Then our model will be
+Having several rider-level predictors, we set out to see how well they predict
+rider intercepts. Now let $U_j$ be the vector of rider-level variables. 
+Then our model will be
 
 \begin{equation}
 Y_i \sim \text{Bernoulli} \left( \text{logit}^{-1}
@@ -178,18 +179,20 @@ Y_i \sim \text{Bernoulli} \left( \text{logit}^{-1}
 \end{equation}
 where,
 \begin{equation}
-\alpha_j \sim N(\gamma_0 + U_j \gamma)
+\alpha_j \sim N(\gamma_0 + U_j \gamma, \sigma_\alpha),
 \end{equation}
 
-This model should be comparable to Model 2.^[Though we would prefer to use
+with $(\gamma_0, \gamma)$ being the group-level parameters we estimate. 
+
+This model should be comparable to Model 2, though because we are trying to
+get estimates of the rider-level predictor parameters, we make use of \textit{Stan}
+instead of `lme4`.Though we would prefer to use
 a model similar to Model 4 from the previous chapter (the one with smoothing
 splines for time of day) the current additive mixed models package `gamm4` (which
 uses `lme4` to fit the mixed models part) does not support estimating the
-variability in group-level estimates. Instead, we fit these models in Stan, a 
-probabilitic modeling language that does full Bayesian statistical inference
-with Markov-chain Monte Carlo sampling. Unfortunately, in this package, smoothing
+variability in group-level estimates. Unfortunately, in \textit{Stan}, smoothing
 splines would have to be coded by hand and we lacked the expertise to write
-the functions to fit smoothing splines ourselves.]
+the functions to fit smoothing splines ourselves.
 
 
 
@@ -198,7 +201,7 @@ the functions to fit smoothing splines ourselves.]
 \centering
 \begin{tabular}{lrrrr}
 \toprule
-\textbf{Parameter} & Estimate & 2.5\% percentile & 97.5\% percentile\\
+\textbf{Parameter} & \textbf{Estimate} & \textbf{2.5\% percentile} & \textbf{97.5\% percentile}\\
 \midrule
 $\gamma^\text{freq}$ & 0.08 & -0.19 & 0.35\\
 $\gamma^\text{weekend}$ & -0.13 & -0.50 & 0.35\\
@@ -223,17 +226,19 @@ with $\sigma_\alpha$, is high.
 ## Cluster Intercepts Versus Rider Intercepts
 
 Do these clusters provide similarly useful information that we got from 
-introducing rider intercepts? Naturally, we expect that a model with cluster
-intercepts will do worse than rider intercepts simply by virtue of less flexibility.
-Having only four different intercepts rather than hundreds doesn't sound like a
-recipe for success. But perhaps there is still a significant benefit. 
+introducing rider intercepts? Because a model with only 4 random intecepts---as
+in the case of cluster intercepts---rather than several hundred---as in the case
+with rider intercepts---is much less flexible, we expect that the cluster intercept
+model will preform much worse. One still might suspect there is still a 
+significant benefit over a fixed intercept model.
 
 There isn't. We computed Model 7, which is identical to Model 4 from the
 previous chapter, but has random intercepts by cluster rather than rider. Model 7
 performed slightly better than Model 6---which only had a fixed intercept---but
 nowhere near as well as Model 4. The separation plots, $\log (\mathcal{L})$,
 AIC, and AUC measures, shown in `r ref("cluster-model-fits", type = "table")`, all demonstrate
-this clearly. 
+this clearly. Given that the rider-level predictors did not seem to be predictive
+of the rider intercepts, this is not a surprise.
 
 <!--
 \begin{table}[htb]

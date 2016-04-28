@@ -24,7 +24,8 @@ Knock Software's *Ride Report* app combines a simple thumbs-up/thumbs-down ratin
 GPS traces of bicycle rides to compile a crowdsourced data set of which routes
 are and are not stressful for urban bicyclists.
 
-The app that collects the data is simple: *Ride Report* automatically detects when
+From the user's perspective, the app that collects the data is simple: 
+*Ride Report* automatically detects when
 a user start riding their bike, records the GPS trace of the route, and then
 prompts the user at the end of the ride to give either a thumbs-up or thumbs-down
 rating. From this, they were able to create a simple "stress map" of Portland, OR,
@@ -83,7 +84,7 @@ rates of riders giving stressful ratings. This can be extended to model
 differences in how riders respond to different kinds of road conditions using
 varying slope models.
 We explore multilevel model further in Section `r ref("h-models", type = "header")`
-and multilevel models for riders in Section `r ref("add-riders", type="header")`.
+and multilevel models for riders in Section `r ref("ride-models", type="header")`.
 
 ## Addressing Road Segments as a Level
 

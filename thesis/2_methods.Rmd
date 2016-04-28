@@ -32,17 +32,19 @@ library(binom)
 
 # Methods
 
-In building our models, we use a multitude of statistical methodologies. We
+We use many statistical methodologies in this paper. We
 outline here the central methods used, both to familiarize the reader and to
-establish the notation we use throughout this paper.
+establish the notation we use throughout this paper. The models we present
+combine logistic regression, multilevel^[Multilevel models are often referred
+to as hierachical models or mixed effects models.] models, additive models,
+and smoothing splines. We also make use of two recently developed graphical model
+evaluation tools: the separation plot and the heat map plot. 
 
-Statistics is often split up into prediction and inference. Both are
-important to us here: we use inference to answer our research questions and
-prediction---through cross validation---to evaluate the validity of our models.
-
-Our models combine logistic regression and multilevel regression. To evaluate
-our models, we use graphical tools, such as the separation plot, to examine the 
-performance.
+The one large methology not covered here is the expectation maximization algorithm
+we use to model the missing data mechanism for missing ride ratings. The theory
+of that algorithm is outlined in `r ref("missing-data", type = "header")` and an 
+example of its implementation can be found in 
+`r ref("em-implementation", type = "header")`.
 
 ## Logistic Regression
 
@@ -54,8 +56,8 @@ outcome.
 
 But, when modeling a binary variable $Y$, we consider it a Bernoulli random variable,
 $$Y = \text{Bernoulli}(p),$$
-where $p$ is the probability the outcome is 1 and $1-p$ is the probability the
-outcome is 0. So our outcome variable $Y$ may be binary, but the primary
+where $p$ is the probability the response is 1 and $1-p$ is the probability the
+response is 0. So our response variable $Y$ may be binary, but the primary
 quantity of interest behind that outcome is $p$, a quantitative variable. This
 is why we consider logistic regression a regression method.
 
@@ -68,14 +70,14 @@ $$y_i = \beta_0 + \beta_1 x_{i1} + \cdots + \beta_j x_{ij} + \epsilon,$$
 where $\epsilon \sim N(0, \sigma^2)$, by estimating $\beta_0, \ldots, \beta_j$.
 We can equivalently write,
 
-$$Y \sim N(\beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j, \sigma^2).$$
+$$y_i \sim N(\beta_0 + \beta_1 x_{i1} + \ldots + \beta_j x_{ij}, \sigma^2).$$
 
 We could, in fact, try to predict $p$ with a linear regression, though such a
 model will always have the problem of predicting probabilities outside of the
 range of $[0, 1]$. That's not a recipe for simple interpretation or reliable predictions.
 Generalized linear regression uses a ``link function,'' $g$, to modify the
 regression so the range of the response more accurately reflects the practical
-range of the variable:
+range of the variable; i.e. model:
 
 $$g(y_i) = \beta_0 + \beta_1 x_1 + \ldots + \beta_j x_j + \epsilon.$$
 
@@ -96,8 +98,8 @@ maps values from $\mathbb{R}$ to $[0,1]$.
 Thus, the function provides a convenient way to map linear combinations of other
 variables onto values that are valid probabilities. Other such functions exist
 and are also used for regressions with binary responses, such as the probit function.
-Logistic regression, however, is easier to interpret and more efficient to
-compute.
+Logistic regression, however, is easier to interpret---because of the odds
+connection---and more efficient to compute.
 
 
 ```{r, echo=FALSE, fig.width=5, fig.height=3, fig.align='center', results='asis'}
@@ -141,7 +143,7 @@ See `r ref("evaluate", type="header")`.)
 
 ## Hierarchical Models and Mixed Effects Models {#h-models}
 
-Data often contain hierarchies. For example, a set of student test scores may
+Data often contain hierarchies. For example, a set of students' test scores may
 contain the hierarchy of districts and schools those students attend. Or a set
 of soil samples may have been taken at several distinct sites, thus having a
 hierarchy of sites and samples. In the bike ride data we examine, there
@@ -159,7 +161,8 @@ specific to the road segments in the route of a ride (e.g. length, presence of
 bike lanes, etc). But there isn't a clear road segment-ride hierarchy:
 each ride contains multiple road segments and each road segment is contained by
 multiple rides. Thus, this isn't a case where multilevel modeling is applicable.
-(The ideas behind it, though, may be fruitfully adapted.)
+(The ideas behind it, though, may be fruitfully adapted, as we discuss in 
+`r ref("routes", type = "header")`)
 
 Gelman describes two traditional ways of dealing with hierarchical data that
 multilevel models contrasts with: "complete pooling" and "no pooling."^[@gelman, p. 7]
@@ -168,42 +171,50 @@ estimates for parameters for every group. In "no pooling," we do entirely
 separate regressions for each group. Multilevel models are a comprimise
 between these extremes ("partial pooling", as Gelman calls it) where all the
 data is considered in a single regression with some parameters shared between
-groups and some different between groups. (This will become clearer when we
-introduce examples of models.)
+groups and some different between groups.
 
 These multilevel models work for other forms of regression, but we will focus
 on logistic regression, as it is the method we use in this paper. We will be
 using notation adapted from Gelman and Hill's description of multilevel 
 models.^[@gelman, p. 251--252] Consider a data set composed of
 
-- $i$ observations of a binary response variable $y_i$,
-- $m$ observation level predictors $X_i = x_i^1, \ldots, x_i^m$,
+- $n$ observations of a binary response variable $y_i$, $i \in 1, \ldots, n$,
+- $p$ observation-level predictors $X_i = x_i^1, \ldots, x_i^p$,
 - $j$ groups in which the observations are split into,
 - $l$ group-level predictors $U_{j[i]} = u_{j[i]}^1, \ldots, u_{j[i]}^l$, where
 $j[i]$ is the group of the $i$th observation.
 
 We could fit a model where the intercept varies by group:
 
-$$\mathbb{P} (y_i = 1) = \text{logit}^{-1}
-(\alpha_{j[i]} + X_i \beta),$$
-$$\alpha_{j[i]} \sim N(\gamma_0 + U_{j[i]} \gamma, \sigma_{\alpha}^2),$$
+\begin{equation}
+y_i \sim \text{Bernoulli} \left( \text{logit}^{-1}
+\left( \alpha_{j[i]} + X_i \beta  \right) \right),
+\end{equation}
+\begin{equation}
+\alpha_{j[i]} \sim N(\gamma_0 + U_{j[i]} \gamma, \sigma_{\alpha}^2),
+\end{equation}
 
 where $\alpha_{j[i]}$ is the intercept for the $j$th group, $\beta$ is a vector
 coefficients for the observation-level predictors, $\gamma_0$ are the group-level
 intercepts, and $\gamma$ is a vector of coefficients for the group-level predictors. 
 We could also specify a similar model where there are no group-level predictors,
 such that we simply have different intercepts for each group,
-$$\alpha_{j[i]} \sim N(\gamma_0, \sigma_{\alpha}^2),$$
+
+\begin{equation}
+\alpha_{j[i]} \sim N(\gamma_0, \sigma_{\alpha}^2),
+\end{equation}
 
 We can also consider a model that has slopes varying by group. For simplicity,
 let's consider just one observation-level predictor, $x_i$, that will have varying
-slopes $\beta_{j[i]}$ as well as one group-level predictor. We could specify the
-model as,
+slopes $\beta_{j[i]}$ as well as one group-level predictor, $u_j$.
+ We could specify the model as,
 
-$$\mathbb{P} (y_i = 1) = \text{logit}^{-1}
-(\alpha_{j[i]} + \beta_{j[i]} x_i),$$
+\begin{equation}
+y_i \sim \text{Bernoulli} \left( 
+\text{logit}^{-1} (\alpha_{j[i]} + \beta_{j[i]} x_i) \right),
+\end{equation}
 
-$$
+\begin{equation}
 \left(
 \begin{array}{c}
 \alpha_{j}\\
@@ -224,38 +235,65 @@ N \left(
 \end{array}
 \right)
 \right).
-$$
+\end{equation}
 
+These models can be fit with maximum likelihood estimation using the `lme4`
+package in \textit{R} or can be fit with Bayesian MCMC using \textit{Stan}.
+The latter has the advantage of making it easy to estimate group-level
+uncertainty at the expense of more computation. We fit models using `lme4`, 
+but make use of \textit{Stan} when we have ride-level parameters we want to
+estimate, in `r ref("stan-model", type = "header")`.
 
+## Additive Models and Smoothing Splines
+
+We want to explore using non-parametric methods to model the relationship with
+time and length, but we wish to keep the other parts of our model. We
+can do this with an additive model. Additive models assume that the response
+is the sum of functions of each of the predictors:
+
+$$\text{logit} (\mathbb{P}(y_i = 1)) =
+\alpha + \sum_{j = 1}^p f_j(x_{ij}).$$
+
+These functions can be linear, so generalized linear regression is a subset of 
+additive models. But more interestingly, these functions can be non-parametric.
+^[How are these models fit? Using
+what's known as the Backfitting Algorithm. We  define the $k$th partial residuals 
+$Y^{(k)} = Y - \left(\alpha + \sum_{j \neq k} f_j(x_j)\right)$. (That is, define
+the portion of $Y$ leftover for $f_k(x_k)$ to fit to after the other $f_j$'s have
+had their share.) Then, iteratively fit each of the functions $f_j$ on the
+partial residuals $Y^{(j)}$ until each of the functions converge. For a further
+quick look at additive models, check out Cosma Shalizi's lecture notes
+(@cosmaadditive)]
+One of the most common types of functions fit are smoothing splines.
+
+Smoothing splines are essentially cubic functions stitched together at points
+called ``knots'' such that the full piece-wise function is continuous and has
+continuous first and second derivative. One can further define cyclic cubic
+splines, which simply have the constraint that the last knot and first knot
+are treated as the same, thus allowing a continuous cyclic function to be fit.
+^[For a brief and entertaining introduction to smoothing splines, see 
+@cosmasplines. For a more in-depth look at splines, check out @wood2006]
+
+Computation of multilevel additive models with splines is available in the
+`gamm4` package, which we use to fit the two following models.
 
 
 ## Tools for evaluating models {#evaluate}
 After fitting our models, we will want to know, how do each of our models compare?
 Did adding a particular term enhance or diminish the accuracy of our model?
-While we are fitting our models for inference, we will be evaluating them by 
-the accuracy of their predictions. That is, how accurately and confidently can 
-the model dicern which rides were rated as good and which as bad?
+Instead of focusing on one measure of fit we use several. Loglikelihood and AIC
+provide useful summaries of fits to the data based on the likelihood function.
+Separation plots---which we discuss in the next section---allow us to assess the
+predictive ability of a model; in particular, can the model identify high and
+low probability events? The Heatmap plot, another graphic tool we assess models
+with, show use how well the predicted probabilities fit the empirical probabilities
+of the corresponding observations; i.e. if the model says a set of observations
+will have $y_i = 1$ 60 percent of the time, is the percentage of those that have
+$y_i = 1$ equal to 60?
 
-The predictions we will evaluate will be done in the context of cross validation.
-Usually, we will just use a simpy 2-fold cross validation, where we split the data into
-two random samples, fitting the model on one set (the "training set"), and
-using the model to predict on the other set (the "testing set") to check
-accuracy. We can also do $k$-fold cross validation, where we split the data into
-$k$ samples, and for each of the samples we train the model with the other $k-1$
-samples and then test with the left out sample.
-
-When splitting the data into testing and training sets, we can not do a simple 
-random sample. If we do, we will end up with riders in the
-testing set that aren't in the training set, which our models that use rider
-information cannot predict on. Thus, we will usually do stratified sampling of
-rides with riders as strata.
-
-<!-- AIC or BIC??? -->
-
-When evaluating the predictions from a model, statistics such as classifications
-rate, false-positive rate, and true-negative rate can be calculated for each 
-validation. For a more comprehensive look at predictive accuracy, we use the 
-separation plot as well as homemade plot to assess our models.
+We also use area under the ROC curve (AUC) measure popular for assessing logistic
+regression. In particular, we compute 10-fold cross validated ROC statistics to
+detect if models are overfitting to the data.
 
 ### The Separation Plot
 
@@ -263,18 +301,15 @@ The separation plot, created by Greenhill et. al.^[@greenhill2011], is designed 
 how well a logistic regression model can distinguish between high and low
 probability events.
 
-Creating a separation plot first requires a model fit to training data and testing
-data to evaluate predictive accuracy on. From the testing data, we need a vector
-$Y$ of observed binary response data and a vector $\hat{Y}$ of predicted
-probabilities of a 1 for each observation, predicted using our model fitted to
-training data.
-
-We plot the data $(Y, \hat{Y})$ as a sequence of vertical strips, colored according
-to observed outcome, $Y$, and ordered from low to high probability based on
-$\hat{Y}$. A curve is superimposed upon the stripes showing the $\hat{Y}$ as
+Let $y$ be a vector of observed binary response and $\hat{y}$ a vector of
+predicted probabilities of a 1 for each observation, predicted by some model.
+Then we can construct the plot as follows:
+We plot the data $(y, \hat{y})$ as a sequence of vertical stripes, colored according
+to observed outcome, $y$, and ordered from low to high probability based on
+$\hat{y}$. A curve is superimposed upon the stripes showing the $\hat{Y}$ as
 a line graph. And finally, a small triangle is placed indicated the point at
-which the two colors of lines would meet if all observations $Y = 0$ were
-placed to the left of all the $Y=1$ observations; in other words, showing where
+which the two colors of lines would meet if all observations $y = 0$ were
+placed to the left of all the $y=1$ observations; \textit{i.e.} showing where
 the boundary would be if the two classes were perfectly separated by the model.
 
 ```{r, echo=F, results='hide', message=F, warning=F}
@@ -325,10 +360,8 @@ options = "tbh")
 ```
 
 Separation plots don't do well with larger sample sizes: if there are two many
-observations, it becomes difficult to read. This is because the resolution of
-the medium the plot is displayed on may not be fine-grained enough to show a 
-single observation's line, thus obscuring the pattern. In these cases, we can
-plot a random sample or modify the graph to be more suitable.
+observations, it becomes difficult to read. There are several ways around this,
+but we choose to randomly sample the observations.
 
 ### Our Probability Plots
 

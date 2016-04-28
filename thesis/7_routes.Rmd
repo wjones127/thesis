@@ -25,13 +25,28 @@ library(reedtemplates)
 ```
 
 
-# Unfinished Work: Incorporating Routes
+# Unfinished Work: Incorporating Routes {#routes}
 
-These models so far do not incorporate route. Unfortunately, I was not able to
-get to models that actually do. The data transformations necessary were more than
-I could reasonably do in addition to the other parts of developing the models. So
+These models so far do not incorporate routes. Though our initial aim was to 
+create models that incorporate route, we were not able to transform the route
+to a state that was useful for modeling. 
 I leave the models as they are, but here I explain some of my work toward the
 goal of incorporating routes and describe some potential modeling approaches.
+Throughout this work is the caveat that much of these results are hard to 
+interpret without taking into account route. We hope future researchers will be 
+able to accomplish this.
+
+## Data Structures for Routes
+Before one can model routes, they need to be represented properly. Ride Report's
+approach has been to discretize the routes into road segments by map matching
+the GPS traces to road segments in the Open Street Map (OSM) data. Road segments
+are convenient in that they are easily obtained and there are also accessible
+segment-level data, such as presence of bike lanes, types of roads, etc.
+
+Road segments are not the only way to represent routes, however. One could also
+consider a route a sequence of intersections. Intersections may be the more
+stressful and dangerous portion of a riders route. We could also combine
+segments and intersections into a directed graph network.
 
 ## Regression Terms for Road Segments
 
