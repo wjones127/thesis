@@ -123,6 +123,31 @@ stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
   scale_fill_gradientn(colors = rainbow(7)) +
   theme_bw(base_family="CMU Serif") + 
   facet_wrap(~rider, nrow = 3)
+
+time_ranges <- data.frame(name = c("morning", "afternoon", "evening"),
+                          start = c(7, 11.5, 16),
+                          end = c(10, 13.5, 19.5))
+
+
+time_designations <- ggplot() +
+  scale_x_continuous(breaks = c(0, 7, 10, 11.5, 13.5, 16, 19.5, 24),
+                     labels = c("12am", "7am", "10am", "11:30am", "1:30pm", "5pm", "7:30pm", "12am")) + 
+  geom_density(data = filter(rides_scaled, weekend == FALSE), 
+       aes(x = time), fill = "grey14", color = NA) +
+  theme_bw(base_family = "CMU Serif") + 
+  labs(title = "Weekday Time of Day Designations") + 
+  geom_rect(aes(xmin = start, xmax = end),
+            ymin = 0, ymax = 0.14,
+            data = time_ranges,
+            alpha = 0.6, fill = "white") +
+  geom_label(data = time_ranges,
+            aes(label = name, x = (start + end) / 2), y = .02,
+            family = "CMU Serif") + 
+  theme(axis.text.x=element_text(size=10, angle=50, vjust = 1.05, hjust = 1))
+
+time_designations
+
+ggsave("plots/time-designations.pdf", width = 4, height = 2.5)
 ```
 
 Feature ideas:
@@ -154,6 +179,10 @@ varianbles and then do principle component analysis (PCA) to create summaries
 that best describe those distributions. We keep these as two separate PCA 
 a distinct from other variables to keep some interprebility in this model. 
 
+
+
+I need to find a way to handle the riders without any rides on weekends. We 
+will just give them the median value.
 ```{r rider-freq}
 # Compute rider averages
 riders <- rides_scaled %>%
@@ -161,20 +190,26 @@ riders <- rides_scaled %>%
   summarise(first_date = min(datetime),
             last_date = max(datetime),
             count = n(),
-            prop_weekend = sum(weekend == TRUE) / count,
-            count_balance = sum(weekend == TRUE & between(time, 0, 12)) / count,
-            length_balance = sum(log_length * (weekend == FALSE & between(time, 0, 12))) /
-              sum(log_length * (weekend == FALSE)),
-            median_length = median(log_length * (weekend == FALSE)),
-            median_length_diff = median_length - median(log_length * (weekend == TRUE)),
-            var_length = var(log_length)) %>%
-  mutate(freq = 7 * count / as.numeric(last_date - first_date))
-
-qplot(x = freq, data = riders, bins = 40) + 
-  labs(title = "Ride Frequency by Rider",
-  x = "Rides per Week", 
-  y = "Count") +
-  theme_bw()
+            count_weekday = sum(weekend == FALSE),
+            prop_weekend = log(sum(weekend == TRUE) / count + 1),
+            #count_balance = log(sum(weekend == TRUE & between(time, 0, 12)) / count + 1),
+            #length_balance = log(sum(exp(log_length) * as.numeric(weekend == FALSE & 
+            #                                               between(time, 0, 12))) /
+            #  sum(exp(log_length) * as.numeric(weekend == FALSE)) + 1),
+            median_length = median(ifelse(weekend == FALSE, log_length, NA), na.rm = TRUE),
+            median_length_weekend = median(ifelse(weekend == TRUE, log_length, NA), na.rm = TRUE),
+            var_length = sqrt(var(log_length * as.numeric(weekend == FALSE))),
+            var_length_weekend = sqrt(var(log_length * as.numeric(weekend == TRUE))),
+            morning = sum(weekend == FALSE & between(time, 7, 10)) / count_weekday,
+            afternoon = log(sum(weekend == FALSE & between(time, 11.5, 13.5)) / count_weekday + 1),
+            evening = sum(weekend == FALSE & between(time, 16, 19.5)) / count_weekday) %>%
+  mutate(freq = log(7 * count / as.numeric(last_date - first_date) + 1),
+         median_length_weekend = ifelse(is.na(median_length_weekend),
+                                        mean(median_length_weekend, na.rm = TRUE),
+                                        median_length_weekend),
+         var_length_weekend = ifelse(var_length_weekend == 0, 
+                                     mean(var_length_weekend),
+                                     var_length_weekend))
 ```
 
 # Game plan
@@ -191,298 +226,93 @@ Okay, so here's the game plan:
 ## Length patterns
 
 
-
-```{r length-pca}
-hist(rides_scaled$log_length)
-bins <- 12
-rider_length_table <- table(as.character(rides_scaled$rider), 
-      cut(rides_scaled$log_length, 
-          breaks = seq(from = -5, to = 2, length = bins + 1)))
-rider_length_dist <- rider_length_table %>% 
-  data.frame() %>%
-  rename(rider = Var1)
-
-rider_lengths <- spread(rider_length_dist, Var2, Freq)
-
-rider_lengths <- cbind(rider_lengths$rider, 
-                           rider_lengths[, -1] / rowSums(rider_lengths[, -1])) %>%
-  rename(rider = `rider_lengths$rider`)
-
-pc_length <- prcomp(rider_lengths[,-1], scale = TRUE)
-
-length_scree <- qplot(x = 1:length(pc_length$sdev), y = pc_length$sdev^2 / sum(pc_length$sdev^2)) + 
-  geom_line() + 
-  labs(title = "Ride Length PCA Scree Plot",
-       x = "Principle Component",
-       y = "Prop. of Var. Explained") + 
-  theme_bw(base_family="CMU Serif")
-
-length_scree
-
-ggsave("plots/length_scree.pdf", width = 4, height = 3)
-
-pc_length_rotation <- data.frame("length" = rownames(pc_length$rotation),
-                                 pc_length$rotation) %>%
-  tbl_df() %>%
-  select(length, PC1, PC2, PC3, PC4) %>%
-  gather(pc, value, -length)
-
-length_loadings <- ggplot(pc_length_rotation, aes(x = length, y = value)) + 
-  geom_bar(stat = "identity") + 
-  facet_wrap(~pc, ncol = 1)+
-  scale_x_discrete(breaks = NULL) +
-    scale_y_continuous(breaks = c(-0.3, 0, 0.3)) +
-  theme_bw(base_family="CMU Serif") + 
-  labs(title = "Length PCA Loadings",
-       x = "standardized log(length)")
-
-length_loadings
-
-ggsave("plots/length_loadings.pdf", width = 3, height = 4)
-
-rider_lengths_w_pc <- cbind(rider_lengths, pc_length$x)
-
-#qplot(x = PC1, y = PC2, data = rider_lengths_w_pc)
-```
-
-```{r length-pca2, eval = FALSE}
-hist(rides_scaled$log_length)
-bins <- 12
-rider_length_table2 <- table(as.character(rides_scaled$rider), 
-      cut(rides_scaled$log_length, 
-          breaks = seq(from = -5, to = 2, length = bins + 1)))
-rider_length_dist2 <- rider_length_table2 %>% 
-  data.frame() %>%
-  rename(rider = Var1)
-
-rider_lengths2 <- spread(rider_length_dist2, Var2, Freq)
-
-rider_lengths2 <- cbind(rider_lengths2$rider, 
-                           rider_lengths2[, -1] / rowSums(rider_lengths2[, -1])) %>%
-  rename(rider = `rider_lengths2$rider`)
-
-names(rider_lengths2) <- c("rider", as.character(1:12))
-
-add_pow <- function(data, pow) {
-  for (var in 1:12) {
-    var_name <- paste(var, pow, sep="^")
-    data[[var_name]] <- data[[as.character(var)]]^pow
-  }
-  data 
-}
-
-rider_lengths2 <- rider_lengths2 %>% add_pow(2) %>% add_pow(3) %>% add_pow(4)
-
-pc_length2 <- prcomp(rider_lengths2[,-1], scale = TRUE)
-
-length_scree2 <- qplot(x = 1:length(pc_length2$sdev), y = pc_length2$sdev^2 / sum(pc_length2$sdev^2)) + 
-  geom_line() + 
-  labs(title = "Ride Length PCA Scree Plot",
-       x = "Principle Component",
-       y = "Prop. of Var. Explained") + 
-  theme_bw(base_family="CMU Serif")
-
-length_scree2
-
-ggsave("plots/length_scree2.pdf", width = 4, height = 3)
-
-pc_length_rotation2 <- data.frame("length" = rownames(pc_length2$rotation),
-                                 pc_length2$rotation) %>%
-  tbl_df() %>%
-  select(length, PC1, PC2, PC3, PC4) %>%
-  gather(pc, value, -length)
-
-length_loadings2 <- ggplot(pc_length_rotation2, aes(x = length, y = value)) + 
-  geom_bar(stat = "identity") + 
-  facet_wrap(~pc, ncol = 2)+
-  scale_x_discrete(breaks = NULL) +
-  theme_bw(base_family="CMU Serif") + 
-  labs(title = "Time PCA Loadings",
-       x = "standardized log(length)")
-
-length_loadings2
-
-ggsave("plots/length_loadings2.pdf", width = 3, height = 2)
-
-rider_lengths_w_pc2 <- cbind(rider_lengths2, pc_length2$x)
-
-#qplot(x = PC1, y = PC2, data = rider_lengths_w_pc)
-```
-
-
-## Time Patterns
-
-Let's try to use PCA to create simple vectors to describe people's time of ride
-patterns. 
-
-```{r time-pca}
-rider_weekday_times <- rides_scaled %>%
-  filter(weekend == FALSE) %>%
-  mutate(time = floor(time)) 
-
-rider_times <- table(as.factor(as.numeric(rider_weekday_times$rider)),
-                     rider_weekday_times$time) %>% 
-  data.frame() %>%
-  rename(rider = Var1, time = Var2, freq = Freq) %>%
-  spread(time, freq)
-
-# Let's normalize the rider times
-rider_times <- cbind(rider_times$rider, 
-                           rider_times[, -1] / rowSums(rider_times[, -1])) %>%
-  rename(rider = `rider_times$rider`)
-
-pc <- prcomp(rider_times[,-1], scale=TRUE, retx = TRUE)
-
-
-qplot(x = 1:length(pc$sdev), y = pc$sdev^2 / sum(pc$sdev^2)) + 
-  geom_line() + 
-  labs(title = "Scree Plot for Rider Variables",
-       x = "Principle Component",
-       y = "Proportion of Variance Explained") + 
-  theme_bw(base_family="CMU Serif") 
-
-pc_rotation <- data.frame("hour" = 1:length(pc$rotation), pc$rotation) %>%
-  tbl_df() %>%
-  select(hour, PC1, PC2, PC3, PC4) %>%
-  gather(pc, value, -hour)
-
-ggplot(pc_rotation, aes(x = hour, y = value)) + 
-  geom_bar(stat = "identity") + 
-  facet_wrap(~pc, ncol = 1) +
-    theme_bw(base_family="CMU Serif") +
-  labs(title = "Loadings for First Four Principal Compenents",
-       x = "hour of day") + 
-  scale_x_continuous(breaks = c(0, 3, 6, 9, 12, 15, 18, 21, 24))
-
-rider_times_w_pc <- cbind(rider_times, pc$x)
-
-clustering <- kmeans(select(rider_times_w_pc, PC1, PC2, PC3, PC4, PC5, PC6), 4, nstart = 30)
-
-rider_times_w_pc$cluster <- as.factor(clustering$cluster)
-
-qplot(x = PC1, y = PC2, color = cluster, data = rider_times_w_pc)
-```
-
-```{r alt-time-pca}
-rider_times2 <- data.frame(rider_times[,1],
-apply(rider_times[,-1], 1, sort, decreasing = TRUE) %>% t()) %>% tbl_df()
-
-#rider_times2 <- rider_times2 %>% select(-X21, -X22, -X23)
-
-remove_zero_cols <- function(M) M[, colSums(abs(M)) != 0]
-
-rider_times2 <- cbind(rider_times2[,1], remove_zero_cols(rider_times2[,-1]))
-
-pc2 <- prcomp(rider_times2[,-1], scale=TRUE, retx = TRUE)
-
-
-time_scree <- qplot(x = 1:length(pc2$sdev), y = pc2$sdev^2 / sum(pc2$sdev^2)) + 
-  geom_line() + 
-  labs(title = "Ride Time PCA Scree Plot",
-       x = "Principle Component",
-       y = "Prop. of Var. Explained") + 
-  theme_bw(base_family="CMU Serif") 
-
-time_scree
-
-ggsave("plots/time_scree.pdf", width = 4, height = 3)
-
-pc_rotation2 <- data.frame("hour" = 1:(ncol(rider_times2)-1), pc2$rotation) %>%
-  tbl_df() %>%
-  select(hour, PC1, PC2, PC3, PC4) %>%
-  gather(pc, value, -hour)
-
-time_loadings <- ggplot(pc_rotation2, aes(x = hour, y = value)) + 
-  geom_bar(stat = "identity") + 
-  facet_wrap(~pc, ncol = 1) +
-    theme_bw(base_family="CMU Serif") +
-  labs(title = "Time PCA Loadings",
-       x = "ranked hour") + 
-  scale_y_continuous(breaks = c(-0.5, 0, 0.5)) +
-  scale_x_continuous(breaks = seq(1, 20, by = 2))
-
-time_loadings
-
-ggsave("plots/time_loadings.pdf", width = 3, height = 4)
-
-rider_times_w_pc2 <- cbind(rider_times2, pc2$x) %>% tbl_df() %>%
-  rename(rider = rider_times...1.)
-```
 # Clustering
 
 ```{r clustering}
-riders_final <- riders %>%
-  left_join(select(rider_times_w_pc2, rider, PC1, PC2), by = "rider") %>%
-  rename(time_pc1 = PC1, time_pc2 = PC2) %>%
-  left_join(select(rider_lengths_w_pc, rider, PC1, PC2), by = "rider") %>%
-  rename(length_pc1 = PC1, length_pc2 = PC2)
+riders_final <- riders
 
 # Need to standardize these variables
 scaled_freq <- scale(riders_final$freq)
 scaled_weekend <- scale(riders_final$prop_weekend)
 riders_final$freq <- scaled_freq[,1]
 riders_final$prop_weekend <- scaled_weekend[,1]
-riders_final$time_pc1 <- scale(riders_final$time_pc1)[,1]
-riders_final$time_pc2 <- scale(riders_final$time_pc2)[,1]
-riders_final$length_pc1 <- scale(riders_final$length_pc1)[,1]
-riders_final$length_pc2 <- scale(riders_final$length_pc2)[,1]
-riders_final$length_balance <- scale(riders_final$length_balance)[,1]
-riders_final$count_balance <- scale(riders_final$count_balance)[,1]
+#riders_final$length_balance <- scale(riders_final$length_balance)[,1]
+#riders_final$count_balance <- scale(riders_final$count_balance)[,1]
 riders_final$median_length <- scale(riders_final$median_length)[,1]
-riders_final$median_length_diff <- scale(riders_final$median_length_diff)[,1]
+riders_final$median_length_weekend <- scale(riders_final$median_length_weekend)[,1]
 riders_final$var_length <- scale(riders_final$var_length)[,1]
+riders_final$var_length_weekend <- scale(riders_final$var_length_weekend)[,1]
+riders_final$morning <- scale(riders_final$morning)[,1]
+riders_final$afternoon <- scale(riders_final$afternoon)[,1]
+riders_final$evening <- scale(riders_final$evening)[,1]
 
-#clustering <- kmeans(select(riders_final, -first_date, -last_date, -rider, -count),4, nstart = 30)
+clustering_data <- select(riders_final, -first_date, -last_date, -rider, -count, -count_weekday)
 
-clustering2 <- hclust(dist(select(riders_final, -first_date, -last_date, -rider, -count)),
-                      method = "ward.D2")
-riders_final$cluster <- as.factor(cutree(clustering2, k = 6))
+test_k <- function(k) kmeans(clustering_data, k, nstart = 100)$tot.withinss
+ss <- sapply(1:8, test_k)
 
-#riders_final$cluster <- as.factor(clustering$cluster)
+choice_k <- qplot(x = 1:8, y = ss) + geom_line() +
+  labs(title = "Total Within SS by Choice of k",
+       x = "k",
+       y = "Total Within SS") +
+  theme_bw(base_family="CMU Serif")
 
-pc <- prcomp(select(riders_final, -first_date, -last_date, -rider, -count, -cluster))
+choice_k
 
-riders_final <- riders_final %>% mutate(PC1 = pc$x[,1], PC2 = pc$x[,2])
+ggsave("plots/choice_k.pdf", width = 3.5, height = 2.5)
 
-scatter1 <- ggplot(riders_final, aes(x = time_pc1, y = time_pc2, color = cluster)) + 
+
+clustering <- kmeans(clustering_data, 4, nstart = 50)
+
+#clustering2 <- hclust(dist(select(riders_final, -first_date, -last_date, -rider, -count)),
+#                      method = "ward.D2")
+#riders_final$cluster <- as.factor(cutree(clustering2, k = 6))
+
+riders_final$cluster <- as.factor(clustering$cluster)
+
+pc <- prcomp(clustering_data)
+
+qplot(x = 1:length(pc$sdev), y = cumsum(pc$sdev^2 / sum(pc$sdev^2))) + 
+  geom_line() +
+  theme_bw(base_family = "CMU Serif") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dotted")
+
+riders_final$PC1 <- pc$x[,1]
+riders_final$PC2 <- pc$x[,2]
+
+cluster_centroids <- riders_final %>% group_by(cluster) %>%
+  summarise(median_length = mean(median_length),
+            var_length = mean(var_length),
+            freq = mean(freq),
+            prop_weekend = mean(prop_weekend))
+
+scatter1 <- ggplot(riders_final, aes(x = PC1, y = PC2, color = cluster)) + 
   geom_point(size = .6) +
   theme_bw(base_family="CMU Serif") +
-  labs(x = "Time PC1", y = "Time PC2") +
+  labs(x = "PC1", y = "PC2") +
   theme(legend.position="top")
-scatter2 <- ggplot(riders_final, aes(x = length_pc1, y = length_pc2, color = cluster)) +
+scatter2 <- ggplot(riders_final, aes(x = median_length, y = var_length, color = cluster)) +
     geom_point(size = .6) +
   theme_bw(base_family="CMU Serif") +
-  labs(x = "Length PC1", y = "Length PC2") +
-  theme(legend.position="top")
+  labs(x = "weekday length variance", y = "weekday median length") +
+  theme(legend.position="top")+
+  geom_point(data = cluster_centroids, 
+             aes(x = median_length, y = var_length), shape = 17, size = 4)
+
 scatter3 <- ggplot(riders_final, aes(x = freq, y = prop_weekend, color = cluster)) +
     geom_point(size = .6) +
   theme_bw(base_family="CMU Serif") +
   labs(x = "rides per week", y = "prop. during weekend") +
-  theme(legend.position="top")
+  theme(legend.position="top") +
+  geom_point(data = cluster_centroids, aes(x = freq, y = prop_weekend), shape = 17, size = 4)
 
 scatter1
 scatter2
 scatter3
 
-qplot(x = PC1, y = PC2, color = cluster, data = riders_final)
-
 ggsave("plots/cluster_scatter1.pdf", scatter1, width = 3, height = 3.5)
 ggsave("plots/cluster_scatter2.pdf", scatter2, width = 3, height = 3.5)
 ggsave("plots/cluster_scatter3.pdf", scatter3, width = 3, height = 3.5)
-
-
-#test_k <- function(k) kmeans(select(riders_final, -first_date, -last_date, -rider, -count), k, nstart = 40)$tot.withinss
-#ss <- sapply(1:8, test_k)
-# 
-# choice_k <- qplot(x = 1:8, y = ss) + geom_line() +
-#   labs(title = "Total Within SS by Choice of k",
-#        x = "k",
-#        y = "Total Within SS") + 
-#   theme_bw(base_family="CMU Serif")
-# 
-# choice_k
-# 
-# ggsave("plots/choice_k.pdf", width = 4, height = 3)
 ```
 
 
@@ -491,8 +321,11 @@ rides_scaled_w_cluster <- select(riders_final, rider, cluster) %>%
   right_join(rides_scaled, by = "rider") %>%
   mutate(weekend_named = as.factor(ifelse(weekend == TRUE, "weekend", "weekday")))
 
+
+#jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", 
+#                                 "yellow", "#FF7F00", "red", "#7F0000"))
+
 cluster_patterns <- rides_scaled_w_cluster %>%
- filter(rider != "242") %>%
 ggplot(aes(x = time, y = log_length)) + 
   stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
     scale_x_continuous(breaks = c(0, 6, 12, 18, 24),
@@ -582,7 +415,7 @@ calc_auc("predict2")
 ```
 
 Let's see how models in STAN do to compare
-```{r stan-models}
+```{r stan-models, eval = FALSE}
 
 rides_complete <- rides_scaled %>% filter(!is.na(stressful))
 
@@ -596,6 +429,7 @@ data = list(
   rating = as.numeric(rides_complete$stressful),
   length = as.numeric(rides_complete$log_length),
   mean_temp = as.numeric(rides_complete$mean.temp),
+  wind_speed = as.numeric(rides_complete$mean.wind.speed),
   gust_speed = rides_complete$gust.speed,
   rainfall = rides_complete$rainfall,
   rainfall_4h = rides_complete$rainfall.4h,
@@ -603,29 +437,29 @@ data = list(
   # Cyclist-level variables
   cyclist_freq = riders_final$freq,
   cyclist_weekend = riders_final$prop_weekend,
-  cyclist_time_pc1 = riders_final$time_pc1,
-  cyclist_time_pc2 = riders_final$time_pc2,
-  cyclist_length_pc1 = riders_final$length_pc1,
-  cyclist_length_pc2 = riders_final$length_pc2,
-  cyclist_length_balance = riders_final$length_balance,
-  cyclist_count_balance = riders_final$count_balance,
+  cyclist_morning = riders_final$morning,
+  cyclist_afternoon = riders_final$afternoon,
+  cyclist_evening = riders_final$evening,
   cyclist_median_length = riders_final$median_length,
-  cyclist_median_length_diff = riders_final$median_length_diff,
-  cyclist_var_length = riders_final$var_length
+  cyclist_median_length_weekend = riders_final$median_length_weekend,
+  cyclist_var_length = riders_final$var_length,
+  cyclist_var_length_weekend = riders_final$var_length_weekend
 )
 
 #compile the model (takes a minute or so)
 model = rstan::stan_model(file="rider_model1.stan")
 
+options(mc.cores = 2)
+
 #evaluate the model
-sampling_iterations = 2e3 #best to use 1e3 or higher
+sampling_iterations = 1e3 #best to use 1e3 or higher
 out = rstan::sampling(
   object = model
   , data = data
   , chains = 2
   , iter = sampling_iterations
   , warmup = sampling_iterations/2
-  , refresh = sampling_iterations/10 #show an update @ each %10
+  , refresh = sampling_iterations/50
   , seed = 1
   , init = list(list(beta_length = 0,
                      sigma_a = 1,
@@ -639,5 +473,20 @@ out = rstan::sampling(
 
 print(out)
 
+save(out, file = "stan_results.RData")
+
 plot(out)
+
+library(purrr)
+
+out_e <- extract(out)
+out_e$beta_length
+
+compute_percentiles <- function(vec) {
+  quants <- quantile(vec, probs = c(.025, .1, 0.9, 0.975))
+  list(lwr_95 = quants[1], upr_95 = quants[4], lwr_80 = quants[2], upr_80 = quants[3])
+}
+
+out_e %>% map(compute_percentiles) 
+
 ```
