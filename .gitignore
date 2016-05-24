@@ -4,5 +4,9 @@
 .dropbox
 data/RIDE/william-trips-export.json
 */*_cache/
+model_iterations/model-2/*_cache/
 library
 data
+data-raw
+model_iterations/model-2/sample.csv
+model_iterations/model-2/sample_evan.csv
