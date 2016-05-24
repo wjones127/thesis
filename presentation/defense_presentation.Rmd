@@ -1,0 +1,354 @@
+---
+title: "Multilevel Models and Missing Data Models for Crowdsourced Bicycle Route Ratings"
+author: "Will Jones"
+date: "May 2, 2016"
+output: beamer_presentation
+bibliography: ../thesis/bib/thesis.bib
+csl: ../thesis/csl/apa.csl
+header-includes:
+- \usepackage{graphicx,latexsym,array,longtable, booktabs,color, colortbl}
+- \definecolor{red}{RGB}{255, 194, 194}
+- \widowpenalties 1 150
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+# The Data
+
+## Ride Report
+
+Ride collection:
+
+- route, timestamp, length collected automatically
+- ratings provided by user
+
+Three main issues in data (we are concerned with here):
+
+1. Subjective ratings
+2. Many ratings missing
+3. Many rides misclassified
+
+Other issues:
+
+- Some rides are split
+- No obvious way to model routes
+
+## Why study this data?
+
+### Ride Report's Goals
+
+- **For cities:** identify the problematic street segments in the city for 
+urban cyclists
+- **For cyclists:** identify the best routes for commuting by bike
+
+![](../thesis/figure/stress_map.png)
+
+## Our Approach
+
+- We attempt to address:
+  1. Issue 1 (subjective ratings) with multilevel models
+  2. Issue 2 (missing ratings) with the expectation maximization algorithm
+- We don't use route information; further research needed
+
+## Weather Data Sources
+
+We combined the ride data with
+
+- daily weather data from the KPDX weather station [@wunderground]
+- hourly rain guage data from the Portland Fire Bureau rain guage [@pdxrain]
+
+![](../thesis/figure/weather_station_map.pdf)
+
+## A note about reproducibility
+
+This entire analysis is availible as an R package in a GitHub repository
+
+- URL: [https://github.com/wjones127/thesis](https://github.com/wjones127/thesis)
+- But, Ride Report data is not included
+
+# Ride Rating Models
+
+## Notation
+
+We have $n$ observations of rides. 
+
+\begin{equation}
+y_i = \begin{cases}
+1, & \text{if ride } i \text{ was given a negative rating;}\\
+0, & \text{otherwise.}
+\end{cases}
+\end{equation}
+
+
+Define predictors,
+
+- $x_i^\text{length}$, log length of ride
+- $x_i^\text{rain}$, rainfall during hour of ride
+- $x_i^\text{rain4h}$, cumulative rainfall from past four hours
+- $x_i^\text{wind}$, mean wind speed that day
+- $x_i^\text{gust}$, maximum gust speed
+- $x_i^\text{temp}$, mean temperature that day
+- $t_i$, time of day of ride
+
+for $i = 1, \ldots, n$. All but the last we represent together as matrix $X$.
+
+## Six Models for Ride Rating
+
+- **Model 1**: Logistic regression model
+- **Model 2**: Add rider random intercepts
+- **Model 3**: Add trigonometric terms for $t$
+- **Model 4**: Additive multilevel model with cyclic cubic spline for $t$
+- **Model 5**: Model 4 with cubic splines for $x^\text{length}$
+- **Model 6**: Model 4 with fixed intercept
+
+## How well do they fit?
+
+\begin{table}[htb]
+\centering
+\caption{Fit summaries for Models 1--6.\label{tab:modelfits}}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Model} & \textbf{$\log (\mathcal{L})$} & \textbf{AIC} &
+\textbf{AUC}$_{\text{CV}}$\footnotemark\\
+\midrule
+\rowcolor{red} Model 1 & -4,786 & 9,586 & 0.552\\
+Model 2 & -3,971 & 7,957 & 0.797\\
+Model 3 & -3,923 & 7,877 & 0.802\\
+Model 4 & -3,930 & 7,870 & 0.802\\
+Model 5 & -3,928 & 7,878 & 0.803\\
+\rowcolor{red} Model 6 & -4,713 & 9,455 & 0.601\\
+\bottomrule
+\end{tabular}
+\end{table}
+\footnotetext{Area under ROC curve estimated with 10-fold cross-validation.}
+
+## Time of Day Trends
+
+![](../thesis/figure/time_fit_plot.pdf)
+
+## What do the intercepts encode?
+
+![](../thesis/figure/time_pred_plot.pdf)
+
+
+# Classifying Riders
+
+## What features can we use?
+
+For riders $j = 1, \ldots, l$, we have rider-level predictors
+
+- $u^\text{freq}_j$, frequency of rides
+- $u^\text{weekend}_j$, proportion of rides on weekends
+- $u^\text{med.len}_j$, median length of weekday rides
+- $u^\text{med.len.w}_j$, median length of weekend rides
+- $u^\text{var.len}_j$, variance of length of weekday rides
+- $u^\text{var.len.w}_j$, variance of length of weekend rides
+- $u^\text{morning}_j$, proportion of rides in morning
+- $u^\text{lunch}_j$, proportion of rides during lunch
+- $u^\text{evening}_j$, proportion of rides in evening
+
+Variables were standardized and clustered using $k$-means clustering
+
+
+## What patterns do these riders exhibit?
+
+![](../thesis/figure/cluster_patterns.pdf)
+
+## What good are these as predictors for rider intercepts?
+
+![](../thesis/figure/stan-model-results.pdf)
+
+## Rider clusters and rider-level predictors
+
+- Model using rider-level predictors to predict intercept found they were poor
+predictors
+- Model using cluster intercepts performed much worse than rider intercepts
+- Unsupervised learning methods are an art; maybe there is a better way
+
+# Missing Data
+
+## Missing Ratings
+
+Of $n = 25,397$ rides, $11,365$ **not rated**.
+
+- Is it safe to ignore these observations?
+
+## Types of Missing Data
+
+Let,
+
+\begin{equation}
+r_i = \begin{cases}
+1, & \text{if ride } i \text{ is missing a rating;}\\
+0, & \text{otherwise.}
+\end{cases}
+\end{equation}
+
+Rubin classifies missing data into three situations^[@little1987 (page 14)]:
+
+1. **Missing Completely at Random (MCAR)**, where $r$ is independent of $r$ and
+   the predictors $X$. *i.e.* $\mathbb{P} (r = 1| y, X) = \mathbb{P}(r = 1$)
+2. **Missing at Random (MAR)**, where $r$ is independent of $y$, but may 
+   depend on $X$, *i.e.* $\mathbb{P} (r = 1 |y, X) = \mathbb{P} (r = 1 | X )$
+3. **Nonignorable, or not MCAR nor MAR**, where $r$ is dependent on $y$.
+
+We believe the missing ratings are nonignorable.
+
+## The EM Algorithm for Missing Data
+
+- The Expectation Maximization (EM) algorithm: procedure for fitting models with
+latent variables.
+- Here, latent variables are missing observations
+- We use the weighting method proposed by Ibrahim and Lipsitz^[@ibrahim1996]. 
+
+## The EM Algorithm: Setup
+
+- Have **data model**: $f(y \;|\; X, \beta)$ and **missing data model**:
+$f(r \;|\; X, y, \alpha)$
+
+### EM algorithm general procedure^[@little1987]:
+
+1. *E-step*: Compute expected loglikelihood,
+\begin{equation}
+Q(\alpha, \beta | \alpha^{(t)}, \beta^{(t)}) = 
+\int l(\alpha, \beta | y) \cdot f(y_\text{mis} | \: y_\text{obs}, \alpha^{(t)},
+\beta^{(t)}) \; dy_\text{mis}
+\end{equation}
+2. *M-step*: maximize $Q(\alpha, \beta | \alpha^{(t)}, \beta^{(t)})$ to get
+$(\alpha^{(t + 1)}, \beta^{(t + 1)})$
+
+## EM Algorithm: Weighting procedure
+1. Get initial estimates of $\alpha$ and $\beta$.
+2. Compute weights
+\begin{equation}
+w_{i\: y_i}^{(t)} = 
+\frac{f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})}{
+\sum_{y_i \in \{0,1\}}
+f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})
+}.
+\end{equation}
+3. Create augmented data:
+
+4. Fit data model and missing data model separately using augmented data
+5. Repeat 2--4 until loglikelihood converges
+
+## EM Algorithm: Augmented Data
+
+- Allows us to fit models with any packages that supports weighting observations
+
+\begin{figure}[htb]
+\centering
+\caption{Creation of augmented data set for the weighted method of the EM algorithm for missing response data. \label{fig:augmented-data}}
+\begin{tabular}{lcl}
+\toprule
+\textbf{Original Data} &  & \textbf{Augmented Data}\\
+\midrule
+
+\begin{tabular}{lll}
+$y_i$ & $x_i$ & $r_i$\\
+\midrule
+1 & 2.4 & 0\\
+0 & 1.3 & 0\\
+NA & -0.4 & 1\\
+& &
+\end{tabular}
+&
+$\to$
+&
+\begin{tabular}{llll}
+$y_i$ & $x_i$ & $r_i$ & $w_i$\\
+\midrule
+1 & 2.4 & 0 & 1\\
+0 & 1.3 & 0 & 1\\
+1 & -0.4 & 1 & 0.2\\
+0 & -0.4 & 1 & 0.8
+\end{tabular}\\
+\bottomrule
+\end{tabular}
+\end{figure}
+
+## Missing Data Model Results: Data Model
+
+\begin{table}[htb]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Parameter} & \textbf{Model 4} & \textbf{EM Model}\\
+\midrule
+Log(Length) & -0.147 & 0.205\\
+& \footnotesize (-0.290, -0.005) & \footnotesize (0.106, 0.304)\\
+Mean Temperature & 0.142 & 0.100\\
+& \footnotesize (0.004, 0.281) & \footnotesize (0.005, 0.196)\\
+Mean Wind Speed & 0.002 & -0.026\\
+& \footnotesize (-0.054, 0.057) & \footnotesize (-0.069, 0.016)\\
+Max Gust Speed & -0.005 & 0.020\\
+& \footnotesize (-0.031, 0.021) & \footnotesize (0.001, 0.039)\\
+Rainfall & 0.050 & 0.051\\
+& \footnotesize (-0.017, 0.117) & \footnotesize (0.009, 0.093)\\
+Rainfall 4-Hour & 0.022 & 0.017\\
+& \footnotesize (0.003, 0.041) & \footnotesize (0.003, 0.030)\\
+Intercept & -2.792 & -3.144\\
+& \footnotesize (-3.334, -2.250) & \footnotesize (-3.604, -2.684)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+## Missing Data Model Results: Nonresponse Model
+
+\begin{table}[htb]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Parameter} & \textbf{Basic Model} & \textbf{EM Model}\\
+\midrule
+$y$ & 0.730 & 1.035\\
+& \footnotesize (0.235, 1.224) & \footnotesize (0.493, 1.577) \\
+Log(Length) & -0.297 & -0.327\\
+& \footnotesize (-0.362, -0.232) & \footnotesize (-0.393, -0.262)\\
+Mean Temperature & 0.200 & 0.139\\
+& \footnotesize (0.139, 0.262) & \footnotesize (0.077, -0.262)\\
+Mean Wind Speed & 0.032 & 0.031\\
+& \footnotesize (0.003, 0.060) & \footnotesize (0.001, 0.061) \\
+Max Gust Speed & -0.003 & -0.007\\
+& \footnotesize (-0.016, 0.010) & \footnotesize (-0.021, 0.006) \\
+Rainfall & 0.007 & -0.024\\
+& \footnotesize (-0.028, 0.041) & \footnotesize (-0.057, 0.009)\\
+Rainfall 4-Hour & -0.002 & 0.010\\
+& \footnotesize (-0.012, 0.009) & \footnotesize (-0.001, 0.021) \\
+Intercept & -0.927 & -0.967\\
+& \footnotesize (-1.124, -0.729) & \footnotesize (-1.163, -0.771)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+## Should we trust these results?
+
+- Recall issue 4: some rides are misclassified as bike rides
+- Perhaps most unrated rides are misclassified?
+- $\implies$ need to fix misclassification before missing data methods can
+be properly applied
+
+## Conclusions
+
+### What we've learned
+
+- Allowing random intercepts for rider gives huge improvements in model performance
+- Modeling missing data may be essential, but data quality of missing data must be fixed
+
+### What remains to be researched
+
+- How do we create models that use routes?
+- Can riders be clustered in a way that predicts their rider intercept?
+- How will rider intercepts change when route is incorporated?
+
+## References {.allowframebreaks}
+
+---
+nocite: | 
+  @stan, @lme4, @gamm4, @Rlang, @wunderground, @pdxrain, @ridereport
+...
+
+
