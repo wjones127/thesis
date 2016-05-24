@@ -1,0 +1,29 @@
+---
+title: "Testing Model"
+author: "Will Jones"
+date: "December 29, 2015"
+output: html_document
+---
+
+
+```{r, echo=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(rgdal))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(lubridate))
+suppressPackageStartupMessages(library(lme4))
+```
+
+
+We are going to do a very basic model here, as a test.
+
+```{r}
+load('../data/rides.RData')
+```
+
+
+```{r}
+model1 <- glmer(rating ~ (1|rider) + original_trip_length,
+               data = rides.binary, family=binomial(link="logit"))
+```
+
