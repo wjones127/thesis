@@ -14,16 +14,59 @@ output: pdf_document
 -->
 
 # Conclusion {.unnumbered}
-  \setcounter{chapter}{4}
+  \setcounter{chapter}{7}
 	\setcounter{section}{0}
 
+<!--
+- Crowdsources data is increasingly important
+- Allowing riders to have varying intercepts is vital to rating systems
+- Clustering is arbitrary; more work needs to be done to find good ways to cluster riders
+- missing data is really important, but may not be valid until misclassification issues are dealed with
+- All of this doesn't mean much until routes are incorporated into the models
+- Rider intercepts will likely have less importance in route model
+-->
+
+By focusing on minimizing barriers to responding and automating as much of the
+data collection as possible, the designers of the *Ride Report* app created
+an infrastructure that could collect large numbers of ride ratings. But sample
+size isn't everything: the subjectivity of the ratings and the pattern of missing
+ratings make this a treacherous data set to model naively. 
+
+The subjective ratings pose a problem particularly when
+used to infer the quality of particular road segments; if most of the rides
+are by one particular rider, then the typical rating over that segment will 
+reflect that particular rider's interpretation of the ratings more than others.
+Our models from `r ref("model-chapter", type = "header")` confirm that modeling
+ride rating with rider intercepts is essential. Adding rider intercepts to a 
+multivariate regression model increased the cross-validated AUC from 0.552---little
+better than the null model---to 0.797. These intercepts turned out to encode much
+more than a rider's baseline tendency to rate a ride negatively; 
+`r ref("time-pred-plot")` showed how much information rider intercepts had about
+riders' typical time of day, and it's likely that riders' typical routes are
+also encoded in these intercepts as well. Future research should pay special
+attention to how these intercepts change when routes are incorporated into
+these models.
+
+Our missing data models showed some questionable results, though it's hard to
+know if those issues stem from the data quality of the unrated rides or a flaw
+in the model. If many of the unrated rides are actually not bicycle rides---
+which we suspect is the case---then these missing data models will not
+be appropriate until the misclassification of non-bike rides as bike rides
+is no longer a problem. 
+
+In some ways, this is an incomplete work. To leverage the insights from this
+paper in creating a map of good and bad routes, models that use ride route
+information need to be developed and implemented. Both the theoretical development
+and the technical implementation are difficult problems in and of themselves. There are
+many ways one could model the relationship between ride rating and route, and
+it's difficult to find any good theoretical justification for one particular model.
+And even if a good theoretical model can be formulated, such models will likely
+not be simple to implement, both because the models will probably not be supported by
+common model fitting packages and because matching the GPS traces to the road network
+model is a difficult inference problem in itself.
 
 
-If we don't want Conclusion to have a chapter number next to it, we can add the `{.unnumbered}` attribute.  This has an unintended consequence of the sections being labeled as 3.6 for example though instead of 4.1.  The \LaTeX\ commands immediately following the Conclusion declaration get things back on track.
 
-#### More info
-
-And here's some other random info: the first paragraph after a chapter title or section head _shouldn't be_ indented, because indents are to tell the reader that you're starting a new paragraph. Since that's obvious after a chapter or section title, proper typesetting doesn't add an indent there.
 
 <!--
 If you feel it necessary to include an appendix, it goes here.
@@ -33,9 +76,9 @@ If you feel it necessary to include an appendix, it goes here.
 
 # A Code Sample of the EM Algorithm {#em-implementation}
 
-Despite its attractive features, there are few explicit explination of how to
+Despite its attractive features, there are few explicit explanation of how to
 actually program the EM algorithm for missing response using weights. The 
-theoretical explination is contained in `r ref("em-algorithm", type="header")`,
+theoretical is contained in `r ref("em-algorithm", type="header")`,
 but for the benefit of the reader, we lay out the practical implementation here.
 
 For this example, we present the same code used for the simulation in 
@@ -84,9 +127,9 @@ simulated_data$y_pred <- (predict(model_y,
 model_r <- fit_model_r(simulated_data)
 ```
 
-Then we start the main EM algorithm iterations. We have two stopping conditions
+Finally, we perform the main loop of EM algorithm iterations. We have two stopping conditions
 here: when the algorithm reaches the maximum number of iterations or when the 
-difference between the current model's loglikelihood and the previous model's
+difference between the current model's AIC and the previous model's AIC
 is less than the tolerance. 
 
 ```{r, eval = FALSE}

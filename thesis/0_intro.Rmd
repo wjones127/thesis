@@ -21,103 +21,76 @@ library(reedtemplates)
 # Introduction {.unnumbered}
 
 Knock Software's *Ride Report* app combines a simple thumbs-up/thumbs-down rating system with
-GPS traces of bicycle rides to compile a crowdsourced data set of which routes
-are and are not stressful for urban bicyclists.
+GPS traces to compile a crowdsourced data set of commuter bicycle rides. Knock's
+goal is to use this data to help cities identify the most problematic routes in
+their infrastructure and help cyclists identify the best routes in their area.
 
 From the user's perspective, the app that collects the data is simple: 
 *Ride Report* automatically detects when
-a user start riding their bike, records the GPS trace of the route, and then
+a user starts riding their bike, records the GPS trace of the route, and then
 prompts the user at the end of the ride to give either a thumbs-up or thumbs-down
 rating. From this, they were able to create a simple "stress map" of Portland, OR,
-which displays the average ride rating of rides going through each discretized
+which displays the average ride rating of rides going through each discrete
 ride segment.
 
 ```{r, results="asis", echo=F, fig.width=10}
 label(path = "figure/stress_map.jpg", 
-caption = "Ride Report's Stress Map for Portland. Greener road segments incidate less
-while more red segments indicate more stressful streets. ``Stress'' computed by
-taking the average rating for each segment.", 
+      caption = "Ride Report's Stress Map for Portland, OR.",
+alt.cap = "Ride Report's Stress Map for Portland, OR. Greener road segments incidate less
+stressful streets while more red segments indicate more stressful streets. 
+``Stress'' is computed by taking the average rating for each segment.", 
       label = "stress-map", type = "figure", scale=0.75)
 ```
 
-The app privileges reducing barriers to response to increase sample size over
-ensuring quality and consistent responses. This presents the first problem: how
-can we analyze ratings when riders are likely rating rides inconsistently?
+The app is designed to minimize barriers to response in order to maximize sample
+size, at the expense of ensuring quality and consistent responses.
+It automates all of the data collection
+except the rating, and the rating only requires (and allows) a binary response.
+There is no direct prompting from the app indicating what criteria cyclists should
+be using to evaluate their rides, other than the labels for the binary ratings. In
+addition, riders' rating their rides on \textit{Ride Report} are volunteers,
+so they are under no obligation to rate their rides. In fact, most of the rides
+lack ratings, and we have no guarantee that the pattern of missing ratings is
+ignorable.
 
-At the same time, we have another challenge. We have ratings associated with
-routes, but we would like to know the effect of particular road segments, for
-both inference (what effect does this road segment have on the rating?) and
-prediction (given a route, what do we expect the rating to be?) purposes.
+The end goal of collecting and studying this data is to be able to accurately
+map which roads are not serving bicycle commuters well. This paper makes steps 
+toward this goal by building models that predict ride rating based on information
+other than route. (We did not create models that involve routes, but we do propose
+ways of modeling routes in `r ref("routes",type = "header")`.) The models we discuss,
+besides measuring the effect of weather, time of day, and ride length on the
+probability of a negative rating, address two nontrivial issues in this data:
+the variability in how different riders rate their rides and the problematic
+missing ratings.
 
-Finally, there are interesting issues with missing data. First, the sample of
-rides we have are biased towards routes that riders percieve as better. Second,
-a significant portion of the rides are missing a response, and non response is
-unlikely to be independent of the response. The good news is that we have all
-the predictors for every ride, enabling us to build a model that is able to
-leverage the data with missing responses rather than listing the missing data
-as a liability.
-
-## Accounting for Rider Rating Variance
-
-For ratings we are interested in modeling variance between riders (as
-we might expect riders to have different rating patterns than their peers) and within riders
-(as riders may not rate the same route and conditions the same every time). To
-model this, we propose using multilevel regression, with random effects from
-each rider. This approach has been used in similar situations, in one case to
-model sexual attraction^[@mackaronis2013].
-
-In a multilevel model, we fit a regression where the intercept term varies by
-group but comes from a common distribution. For example,
-if we let $r_i$ be the rating of the $i$th ride, $X_i$ be the ride-level variables,
+We are not the first to worry about the issue of variability in riders 
+interpretations of what a good or bad route is. As
+Meyers, a previous researcher examining the \textit{Ride Report} data observed,
+"everyone has different standards for what a 'good' or 'bad' ride is, and the 
+data might benefit from randomized IDs attached to each cell device."^[@meyers2015]
+Thankfully, *Ride Report* does keep track of which rides belong to each to rider.
+We model the varying overall tendencies of each rider to rate a ride negatively
+with random intercepts in a multilevel model. For example,
+if we let $y_i$ be the rating of the $i$th ride and $X_i$ be the ride-level variables,
 then we can fit a regression:
 
-$$\mathbb{P}(r_i = 1) = \text{logit}^{-1}
+$$\mathbb{P}(y_i = 1) = \text{logit}^{-1}
 \left( \alpha_{j[i]} +  X_i \beta \right) ,$$
 where $\alpha_j$ is an intercept specific to rider $j$. In addition, the rider
 intercepts come from a common distribution,
 $$\alpha_j \sim N (\mu_\alpha, \sigma^2_\alpha),$$
+where $\mu_\alpha$ is the mean of all the $\alpha_j$s. Similar models have been
+used in situations when data consist of subjective ratings,
+including one study examining how people rate sexual attraction^[@mackaronis2013].
 
-where $\mu_\alpha$ is the mean of all the $\alpha_j$s.
-
-Using varying intercepts will allow our model to exhibit the property of varying
-rates of riders giving stressful ratings. This can be extended to model
-differences in how riders respond to different kinds of road conditions using
-varying slope models.
-We explore multilevel model further in Section `r ref("h-models", type = "header")`
-and multilevel models for riders in Section `r ref("ride-models", type="header")`.
-
-## Addressing Road Segments as a Level
-
-We examine multiple approaches to modeling road segments. In the first, we
-regard add regression term for the route, that is a weighted sum of terms for
-each road segment in the route, weighted by the lengths of the segments. The
-terms for the 
-
-the contribution of the route to be a weighted sum of the contributions
-of road segments in the route, weighted by the lengths of the segments. 
+Missing ratings are another important problem in this data set. 
+While we have the route they chose and all associated covariates, the 
+response variable (rating) is missing for many rides. As
+we will discuss in `r ref("missing-data", type="header")`, the pattern
+of non-response is likely to be correlated with the rating the rider would have
+given, which may mean our parameter estimates are inaccurate. To address this problem, we 
+implement a version of the expectation maximization
+algorithm for missing data, creating a model that simultaneously estimates the
+missing data mechanism and the ride rating model.
 
 
-
-<!-- might consider researching multi-group multilevel models -->
-<!-- include sample size concerns? Not sure yet. -->
-
-
-## Approaching Missing Data at Multiple Levels
-
-This data set contains missing data at two levels.
-
-First, there are many routes without any ratings. The routes taken by riders are
-not a random sample of routes, but are often already chosen by the rider as the
-least stressful ride. As we might expect because of this bias, only a small
-proportion of rides are rated as "stressful."
-
-One solution we explore to this problem is adding a segment popularity parameter
-as a segment-level predictor.
-
-Second, not every ride is given a rating. We do have the route they chose,
-and all associated covariates, but the response variable, rating is missing. As
-we will discuss in chapter `r ref("missing-data", type="header")`, the pattern
-of non-response is unlikely to be unbiased.
-
-To address the second problem, we first build a separate probability model that
-predicts non response, and then integrate that model into our main model.

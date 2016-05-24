@@ -96,16 +96,17 @@ Log length and temperature were standardized. The center of log length was
 
 ```{r summary, echo=FALSE}
 total_rides <- nrow(rides_scaled)
-rides_scaled <- rides_scaled %>% filter(!is.na(stressful))
 #rides_scaled <- sample_n(rides_scaled, 3000)
 # Find riders with at least 20 rated rides
-rider_counts <- rides_scaled %>% group_by(rider) %>% summarise(count = n()) %>%
+rider_counts <- rides_scaled %>% filter(!is.na(stressful)) %>% group_by(rider) %>% summarise(count = n()) %>%
   filter(count > 20)
 rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
 
-rated_rides <- rides_scaled %>% nrow()
-unrated_rides <- total_rides - rated_rides
+rated_rides <- sum(!is.na(rides_scaled))
+unrated_rides <- 
 
+rides_scaled <- rides_scaled %>% filter(!is.na(stressful))
+  
 neg_ratings <- sum(rides_scaled$stressful == TRUE)
 pos_ratings <- sum(rides_scaled$stressful == FALSE)
 
@@ -639,7 +640,7 @@ time_plot <- filter(fake_time_data, model != "model6") %>%
   theme_bw(base_family="CMU Serif") + 
   scale_x_continuous(breaks = c(0, 6, 12, 18, 24),
                      labels = c("12am", "6am", "12pm", "6pm", "12am"))  + 
-  scale_y_continuous(limits = c(0, 0.018)) + 
+  scale_y_continuous(limits = c(0, 0.007)) + 
   labs(x = "hour of day",
        y = "p(negative rating)",
        title = "Fitted Model Functional Forms for Time of Day") + 
@@ -669,7 +670,7 @@ time_plot_6 <- filter(fake_time_data, model == "model6") %>%
        title = "Time of Day Fit for Model 6") 
 
 ggsave(time_plot_6, file="plots/time_fit_plot_6.pdf",
-       width = 6, height = 3)
+       width = 6, height = 2)
 ```
 
 Weird. It seems the random intercepts allow us to encode a lot of information
@@ -700,13 +701,14 @@ intercept_test_sep_plots <- grid.arrange(
 
 intercept_test_sep_plots
 ggsave(intercept_test_sep_plots, file="plots/intercept_test_plot.pdf",
-       width = 5.5, height = 1.5)
+       width = 5.5, height = 1)
 ```
 
 
 ```{r}
 time_pred <- fitted_values
 time_pred$time <- rides_scaled$time
+time_pred$weekend <- rides_scaled$weekend
 time_pred <-  time_pred %>%
   gather(model, pred, 2:7) %>%
   mutate(model = factor(model))
@@ -714,11 +716,12 @@ time_pred$model <- plyr::mapvalues(time_pred$model,
                                    from = levels(time_pred$model),
                                    to = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", "Model 6"))
 
-time_pred_plot <- ggplot(time_pred, aes(x = time, y = pred)) +
-  geom_point(alpha = 0.1, size = 0.8) + 
+time_pred_plot <- ggplot(filter(time_pred, weekend == FALSE), aes(x = time, y = pred)) +
+  geom_point(alpha = 0.1, size = 0.4) + 
   facet_wrap(~model) +
   theme_bw(base_family="CMU Serif") + 
   labs(title = "Model Predictions by Time")
+
 
 time_pred_plot
 

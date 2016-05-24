@@ -8,7 +8,7 @@ output: html_document
 ```{r packages, echo=FALSE, message = FALSE, warning=FALSE}
 source("prob-var-plot.R")
 source("separation-plot.R")
-packages <- c("ggplot2", "gamm4", "lubridate", "dplyr", "knitr", "AUC")
+packages <- c("ggplot2", "gamm4", "dplyr", "knitr", "AUC", "lubridate")
 sapply(packages, library, character.only = TRUE)
 filter <- dplyr::filter
 ```
@@ -93,7 +93,7 @@ rides_scaled$rider <- plyr::mapvalues(rides_scaled$rider,
 ```{r exploratory-plots}
 rides_scaled <- sample_n(rides_scaled, 10000)
 # Find riders with at least 20 rated rides
-rider_counts <- rides_scaled %>% group_by(rider) %>% summarise(count = n()) %>%
+rider_counts <- rides_scaled %>% filter(!is.na(stressful)) %>% group_by(rider) %>% summarise(count = n()) %>%
   filter(count > 20)
 rides_scaled <- rides_scaled %>% filter(rider %in% rider_counts$rider)
 rides_scaled$r <- is.na(rides_scaled$stressful)
@@ -127,6 +127,8 @@ invlogit <- function (x) { 1 / (1 + exp(-x))}
 predict_gamm <- function(model, newdata) {
   intercepts <- coef(model$mer)$rider[["(Intercept)"]]
   intercept_vector <- intercepts[match(newdata$rider, rownames(coef(model$mer)$rider))]
+  predict(model$gam, newdata = newdata) %>% is.na() %>% sum() %>% print()
+  intercept_vector %>% is.na() %>% sum() %>% print()
   invlogit(predict(model$gam, newdata = newdata) + intercept_vector)
 }
 ```
@@ -138,7 +140,7 @@ fit_y <- function(data, weights = NULL) {
                   rainfall + rainfall.4h  + s(time, bs="cc", k=9, by = weekend),
                 random =~(1|rider),
                 knots=list(time=seq(0, 24, 3)),
-                data = rides_scaled, family = binomial, weights = weights)
+                data = data, family = binomial, weights = weights)
 }
 fit_r <- function(data, weights = NULL) {
   gam(r ~ 1 + log_length + mean.temp + gust.speed + rainfall + rainfall.4h + mean.wind.speed +
@@ -156,7 +158,7 @@ init_model_y <- model_y
 init_model_r <- model_r
 
 summary(model_r)
-summary(model_y)
+summary(model_y$gam)
 
 # Setup data frames
 rides_complete <- rides_scaled %>%
@@ -194,8 +196,9 @@ for (i in 1:1000) {
                                stressful = TRUE),
                         mutate(rides_missing,
                                weight = w_y2,
-                               stressful = FALSE))
-  model_y <- fit_r(df_augmented, weights = df_augmented$weight)
+                               stressful = FALSE)) %>%
+    data.frame()
+  model_y <- fit_y(df_augmented, weights = df_augmented$weight)
   model_r <- fit_r(df_augmented, weights = df_augmented$weight)
     current_aic <- AIC(model_y$mer)
     print(last_aic - current_aic)
@@ -218,7 +221,7 @@ summary(model_r)
 plot(init_model_r)
 plot(model_r)
 
-save(model_y, model_r, file = "missing_data_models.RData")
+save(init_model_y, init_model_r, model_y, model_r, file = "missing_data_models.RData")
 ```
 
 The new AIC is `r new_aic`. Impressive!
@@ -231,7 +234,7 @@ predictions <- data.frame("actual" = rides_complete$stressful,
 sep_plot <- separation_plot(predictions, "actual", "pred")
 sep_plot
 
-ggsave(sep_plot, file = "missing_plots/em-separation-plot.pdf", width = 4, height = 0.25)
+ggsave(sep_plot, file = "plots/em-separation-plot.pdf", width = 4, height = 0.25)
 
 kable(confint(model_y$gam))
 

@@ -105,7 +105,7 @@ some_riders <- rides_scaled$rider %>% unique() %>% sample(9)
 
 
 ```{r}
-ggplot(filter(rides_scaled), aes(x = time, y = log_length)) + 
+ggplot(filter(rides_scaled, !is.na(stressful)), aes(x = time, y = length_meters)) + 
  # geom_point(alpha = 0.2) +
 stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
     scale_x_continuous(breaks = c(0, 6, 12, 18, 24),
@@ -113,7 +113,10 @@ stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
   scale_fill_gradientn(colors = rainbow(7)) +
   #scale_fill_gradient(low = "white", high = "black") + 
   theme_bw(base_family="CMU Serif") + 
-  facet_wrap(~weekend)
+  facet_wrap(~weekend) +
+  scale_y_log10(limits = c(50, 30000),
+                breaks = 10^seq(2, 4, length = 5),
+                labels = c("0.1 km", "0.32 km", "1 km", "3.2 km", "10 km"))
 
 ggplot(filter(rides_scaled, rider %in% some_riders & weekend == TRUE), 
        aes(x = time, y = log_length)) + 
@@ -191,7 +194,7 @@ riders <- rides_scaled %>%
             last_date = max(datetime),
             count = n(),
             count_weekday = sum(weekend == FALSE),
-            prop_weekend = log(sum(weekend == TRUE) / count + 1),
+            prop_weekend = sum(weekend == TRUE) / count,
             #count_balance = log(sum(weekend == TRUE & between(time, 0, 12)) / count + 1),
             #length_balance = log(sum(exp(log_length) * as.numeric(weekend == FALSE & 
             #                                               between(time, 0, 12))) /
@@ -203,7 +206,7 @@ riders <- rides_scaled %>%
             morning = sum(weekend == FALSE & between(time, 7, 10)) / count_weekday,
             afternoon = log(sum(weekend == FALSE & between(time, 11.5, 13.5)) / count_weekday + 1),
             evening = sum(weekend == FALSE & between(time, 16, 19.5)) / count_weekday) %>%
-  mutate(freq = log(7 * count / as.numeric(last_date - first_date) + 1),
+  mutate(freq = count / as.numeric(last_date - first_date),
          median_length_weekend = ifelse(is.na(median_length_weekend),
                                         mean(median_length_weekend, na.rm = TRUE),
                                         median_length_weekend),
@@ -232,8 +235,8 @@ Okay, so here's the game plan:
 riders_final <- riders
 
 # Need to standardize these variables
-scaled_freq <- scale(riders_final$freq)
-scaled_weekend <- scale(riders_final$prop_weekend)
+scaled_freq <- scale(log(riders_final$freq + 1))
+scaled_weekend <- scale(log(riders_final$prop_weekend + 1))
 riders_final$freq <- scaled_freq[,1]
 riders_final$prop_weekend <- scaled_weekend[,1]
 #riders_final$length_balance <- scale(riders_final$length_balance)[,1]
@@ -261,14 +264,10 @@ choice_k
 
 ggsave("plots/choice_k.pdf", width = 3.5, height = 2.5)
 
-
+set.seed(42424278)
 clustering <- kmeans(clustering_data, 4, nstart = 50)
-
-#clustering2 <- hclust(dist(select(riders_final, -first_date, -last_date, -rider, -count)),
-#                      method = "ward.D2")
-#riders_final$cluster <- as.factor(cutree(clustering2, k = 6))
-
 riders_final$cluster <- as.factor(clustering$cluster)
+
 
 pc <- prcomp(clustering_data)
 
@@ -280,38 +279,32 @@ qplot(x = 1:length(pc$sdev), y = cumsum(pc$sdev^2 / sum(pc$sdev^2))) +
 riders_final$PC1 <- pc$x[,1]
 riders_final$PC2 <- pc$x[,2]
 
-cluster_centroids <- riders_final %>% group_by(cluster) %>%
-  summarise(median_length = mean(median_length),
-            var_length = mean(var_length),
-            freq = mean(freq),
-            prop_weekend = mean(prop_weekend))
-
 scatter1 <- ggplot(riders_final, aes(x = PC1, y = PC2, color = cluster)) + 
   geom_point(size = .6) +
   theme_bw(base_family="CMU Serif") +
   labs(x = "PC1", y = "PC2") +
   theme(legend.position="top")
-scatter2 <- ggplot(riders_final, aes(x = median_length, y = var_length, color = cluster)) +
-    geom_point(size = .6) +
-  theme_bw(base_family="CMU Serif") +
-  labs(x = "weekday length variance", y = "weekday median length") +
-  theme(legend.position="top")+
-  geom_point(data = cluster_centroids, 
-             aes(x = median_length, y = var_length), shape = 17, size = 4)
 
-scatter3 <- ggplot(riders_final, aes(x = freq, y = prop_weekend, color = cluster)) +
+cluster_centroids <- cbind(riders, "cluster" = riders_final$cluster) %>%
+  group_by(cluster) %>%
+  summarise(freq = mean(freq),
+            prop_weekend = mean(prop_weekend))
+
+
+scatter3 <- ggplot(riders_final, aes(x = riders$freq, y = riders$prop_weekend, color = cluster)) +
     geom_point(size = .6) +
   theme_bw(base_family="CMU Serif") +
-  labs(x = "rides per week", y = "prop. during weekend") +
+  labs(x = "rides per day", y = "prop. during weekend") +
   theme(legend.position="top") +
-  geom_point(data = cluster_centroids, aes(x = freq, y = prop_weekend), shape = 17, size = 4)
+  geom_point(data = cluster_centroids, aes(x = freq, y = prop_weekend), shape = 17, size = 4) + 
+  scale_x_log10() + 
+  scale_y_log10()
 
 scatter1
-scatter2
+
 scatter3
 
 ggsave("plots/cluster_scatter1.pdf", scatter1, width = 3, height = 3.5)
-ggsave("plots/cluster_scatter2.pdf", scatter2, width = 3, height = 3.5)
 ggsave("plots/cluster_scatter3.pdf", scatter3, width = 3, height = 3.5)
 ```
 
@@ -326,7 +319,7 @@ rides_scaled_w_cluster <- select(riders_final, rider, cluster) %>%
 #                                 "yellow", "#FF7F00", "red", "#7F0000"))
 
 cluster_patterns <- rides_scaled_w_cluster %>%
-ggplot(aes(x = time, y = log_length)) + 
+ggplot(aes(x = time, y = length_meters)) + 
   stat_density_2d(geom = "raster", aes(fill = ..density..), contour = FALSE) +
     scale_x_continuous(breaks = c(0, 6, 12, 18, 24),
                      labels = c("12am", "6am", "12pm", "6pm", "12am")) + 
@@ -334,9 +327,13 @@ ggplot(aes(x = time, y = log_length)) +
   scale_fill_gradientn(colors = rainbow(7)) +
   #scale_fill_gradient(low = "white", high = "black") + 
   theme_bw(base_family="CMU Serif") + 
-  labs(x = "time of day", y = "log(length)", 
+  labs(x = "time of day", y = "ride length", 
        title = "Cluster Time and Length Patterns") +
-  theme(axis.text.x=element_text(size=10, angle=50, vjust = 1.05, hjust = 1))
+  theme(axis.text.x=element_text(size=10, angle=50, vjust = 1.05, hjust = 1)) +
+  scale_y_log10(limits = c(50, 30000),
+                breaks = 10^seq(2, 4, length = 5),
+                labels = c("0.1 km", "0.32 km", "1 km", "3.2 km", "10 km"))
+
 
 cluster_patterns
 

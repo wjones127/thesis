@@ -27,24 +27,32 @@ library(reedtemplates)
 
 # Modeling Missing Response {#missing-data}
 
-We have a significant portion of observations with no response. But we do have
-all the predictors for every observation. So just as we built a model to predict
-the rating, can we build a model to predict whether a rider will give a rating?
-Going further, could we combine our rating model and nonresponse model into one
-model, such that our predictions for ratings will take into account biases in
-nonresponse?
+Of the  25,397 rides in the data set, 11,365 were not rated. With such a large
+amount of missing data, careful consideration should be made about what can
+be inferred from this data set. A common problem with missing responses in
+crowdsourced rating data sets is that the missingness of ratings is not
+independent of the ratings that the users would give. This worry motivated
+Ying, Feinberg, and Wedel's work on creating models for recomendation systems
+based on online ratings that explicitely modelled missing data^[@ying2006]. In
+the case of rides, it's possible that cyclists are more likely to rate their
+ride if they had a bad experience than if their ride was uneventful. This kind
+of correlation between missingness and the response can cause strong biases
+in the estimates, as we will demonstrate.
 
-We attempt to address these two questions in this chapter. The methods we present
-in this chapter could improve inference greatly on this data, but we do have
-concerns about the current quality of the data for which there are no reponses.
-As mentioned in Chapter 1, one big problem with data collection is that rides
+In this chapter, we attempt to address the missing data issues by fitting a model
+that simultanesouly models the missing data mechanism and the ride ratings.
+However, with the current state of the ride data, these models may be unable to
+come up with accurate estimates because of another problem in the data collection.
+As mentioned in Chapter 1, rides
 are often misclassified as bike rides when they are actually car rides or rides
 on public transit. We suspect that many of the unrated rides are rides that
 were misclassified as bike rides, and thus were not rated by the rider. (We
 assume that riders don't often go through the effort of correcting the
 classification of rides and know not to rate rides that weren't bike rides.)
-That being said, this issue could potentially be fixed and these methods used
-again in the future.
+If this is the case, then it would be inappropriate to make use of the data
+with missing responses. If, however, *Ride Report* is able to improve their
+classification enough to make this a non-issue, these methods could be vital
+to accurately modeling ride rating.
 
 ## What could possibly go wrong?
 
@@ -58,22 +66,20 @@ r_i = \left\{ \begin{array}{ll}
 \end{array}
 \right.
 \end{equation}
+for $i = 1,\ldots, n$
 
 Rubin classifies missing data into three situations^[@little1987 (page 14)]:
 
 1. **Missing Completely at Random (MCAR)**, where $R$ is independent of $Y$ and
-   the predictors $X$. *i.e.*, $\mathbb{P} (R = 1| Y, X) = \mathbb{P}(R = 1$.)
+   the predictors $X$. *i.e.* $\mathbb{P} (R = 1| Y, X) = \mathbb{P}(R = 1$)
 2. **Missing at Random (MAR)**, where $R$ is independent of $Y$, but may 
    depend on $X$, *i.e.* $\mathbb{P} (R = 1 |Y, X) = \mathbb{P} (R = 1 | X )$
 3. **Nonignorable, or not MCAR nor MAR**, where $R$ is dependent on $Y$.
 
-We believe that rider ratings may be correlated with nonresponse. One explanation:
-riders who have a unpleasant experience on the road might feel more incentive
-to report their experience on the app than those who had a ride that was
-uneventful. This motivates our exploration of missing data models, though, of
-course, is by no means evidence of nonignorable missing data.
+As discussed in the introduction, we believe that rider ratings may be correlated
+with nonresponse and thus the missing ratings are non-ignorable.
    
-If missing data is nonignorable, what could go wrong with our models? Let look 
+If missing data is nonignorable, what could go wrong with our models? Let's look 
 at a toy example. Define the data set of $n$ observations with $x \in \mathbb{R}^n$,
 $y \in \{0,1\}^n$, and $R$ defined as before, where
 $$x_i \sim \text{Normal}(0,1),$$
@@ -135,15 +141,15 @@ ggsave('figure/missing_model1_estimates.pdf', missing_model1_estimates, width=6,
 \begin{figure}[htb]
 \centering
 \includegraphics{figure/missing_model1_estimates.pdf}
-\caption[Simulated example of biased estimates from nonignorable missing data.]{Simulated example of logistic regression fits to a model with nonignorable
+\caption[Simulated example of biased estimates from nonignorable missing response]{Simulated example of logistic regression fits to a model with nonignorable
 missing response. One data set of size $n = 10^4$ was computed from the toy data model.
 We then recomputed $R$ 1,000 times, each time fitting a simple logistic regression
-model to $Y$ and $X$. \label{fig:missing-model1-estimates}}
+model to $y$ and $X$. \label{fig:missing-model1-estimates}}
 \end{figure}
 
 
-If we attempt to fit a logistic regression model to this data, our slopes will
-be unbiased but our estimate of the intercept will be biased. 
+If we attempt to fit a logistic regression model to this data our estimate of 
+the intercept will be inaccurate. 
 `r ref("missing-model1-estimates")` shows the results of a simulation, computing
 the slope and intercepts for 1,000 different patterns of missing data for the
 same generated data set generated from our toy data model.
@@ -160,22 +166,24 @@ understand the patterns of missing response?
 
 ## Modeling the Missing Data Mechanism with Expectation Maximization {#em-algorithm}
 
-Here we perform the expectation maximization algorithm using the
+Here we perform the expectation maximization (EM) algorithm using the
 weighting method proposed by Ibrahim and Lipsitz^[@ibrahim1996]. Let 
-$y_i$ be our binary response and $x_i$ be our predictors. With these we have
-our complete data logistic regression model $f(y_i \;|\; x_i, \beta)$, where
+$y$ be our binary response and $X$ be our predictors. With these we have
+our complete data logistic regression model $f(y \;|\; X, \beta)$, where
 $\beta$ is a vector of parameters in the complete data model.
 
 We then specify a logistic regression model for missingness
-(the $r_i$'s): $f(r_i \;|\; x_i, y_i, \alpha)$, where $\alpha$ is the vector of
+($R$): $f(R \;|\; X, y, \alpha)$, where $\alpha$ is the vector of
 parameters in the missingness model.
 
 We begin the algorithm by getting our first estimates of $\alpha$ and $\beta$.
-We obtain $\beta^{(1)}$ by estimating $\beta$ with only the non-missing data.
-We can then estimate the $y_i$ for the missing data using $\beta^{(1)}$, and
+We obtain $\beta^{(1)}$ by estimating $\beta$ with only the non-missing data
+(*i.e.* fit the models as if there were no missing data).
+We can then estimate $y$ for the missing data using $\beta^{(1)}$, and
 then use those estimates to compute $\alpha^{(1)}$.
 
-For the E-step, we compute weights for each observation with missing response
+For the E-step, we compute weights for each observation with missing response,
+representing the probability that the $i$th observation has response value $y_i$:
 
 \begin{equation}
 w_{i\: y_i}^{(t)} = 
@@ -184,12 +192,19 @@ f(y_i \;|\; r_i, x_i, \alpha^{(t)}, \beta^{(t)}) =
 \sum_{y_i \in \{0,1\}}
 f(y_i \;|\; x_i, \beta^{(t)}) f(r_i \;|\; x_i, y_i, \alpha^{(t)})
 }.
+\label{eq:weights}
 \end{equation}
+
+\ref{eq:weights} is essentially an application of Bayes' theorem. We can view
+$f(y_i \;|\; r_i, x_i, \alpha^{(t)}, \beta^{(t)})$ as the posterior density of 
+$y_i$ given observation $i$ is missing, where $f(y_i \;|\; x_i, \beta^{(t)})$ is
+the prior distribution and $f(r_i \;|\; x_i, y_i, \alpha^{(t)})$ serves as the
+likelihood.
 
 For observed responses, $w_{i\: y_i}^{(t)} = 1$. Note that for each observation 
 $i$, $\sum_{y_i \in \{0,1\}} w_{i\; y_i} = 1.$  We can compute
 $f(y_i \;|\; x_i, \beta^{(t)})$ and $f(r_i \;|\; x_i, y_i, \alpha^{(t)})$ by 
-making use of predictions from regression models. So in \textit{R}, we can
+making use of predictions from regression models. So in `R`, we can
 fit models and use the `predict()` function to get our probabilities from
 each of these models.
 
@@ -207,7 +222,7 @@ likelihood for the complete data model, and then estimating $\alpha^{(t + 1)}$
 using the same method. To maximize $l(\alpha, \beta | x_i, y_i, r_i)$, we 
 maximize the product of their likelihoods,
 $$l(\alpha, \beta | x_i, y_i, r_i) = l(\beta | x_i, y_i) l(\alpha | r_i, x_i, y_i),$$
-which we can maximize by maximize each of the likelihoods separately because
+which we can maximize by maximizing each of the likelihoods separately because
 our estimates of $\alpha$ and $\beta$ are only dependent on each other through
 $x$ and $y$. This allows us to use
 any package that can fit models by maximum likelihood estimation using weights
@@ -222,7 +237,10 @@ values of the response, and also contain the weights computed in the E-step.
 
 \begin{figure}[htb]
 \centering
-\caption{Creation of augmented data set for the weighted method of the EM algorithm for missing response data. \label{fig:augmented-data}}
+\caption[How to create augmented data for EM algorithm]{
+How to create augmented data for EM algorithm: duplicate rows that are missing
+the response variable, assigning to each row a possible value of the reponse
+and its associated weight. \label{fig:augmented-data}}
 \begin{tabular}{lcl}
 \toprule
 \textbf{Original Data} &  & \textbf{Augmented Data}\\
@@ -251,14 +269,16 @@ $y_i$ & $x_i$ & $r_i$ & $w_i$\\
 \end{tabular}
 \end{figure}
 
-We repeat the E and M step until the values of $\alpha$ and $\beta$ converge.
+We repeat the E and M step until the joint loglikelihood converges to within
+some tolerance. An implementation of this algorithm can be found in
+`r ref("em-implementation", type = "header")`.
 
 As an example, we simulated a dataset from the same model we presented earlier
 of size $10^4$. Of those observations, 6,252 were missing. 
 As shown in `r ref("EM-sim", type = "table")`, the estimate for
 the intercept in the model that only considers the complete data is way off, but
-the model resulting from the EM algorithm are nearly as accurate as the model 
-computed fit to the full data (with missing values filled in from the original
+the model resulting from the EM algorithm is nearly as accurate as the model 
+ fit to the full data (with missing values filled in from the original
 data model.) The missing data model is also able to get accurate estimates of
 the parameters that define the missing data mechanism, but the estimates are
 quite uncertain.
@@ -338,7 +358,7 @@ EM Final Model & $0.042$ & $0.065$ & $3.814$ &  $0.157$\\
 \end{table}
 
 \begin{table}[htb]
-\caption{Estimates for missing data mechanism. \label{tab:EM-sim-missing}}
+\caption{Estimates for missing data mechanism for simulated model. \label{tab:EM-sim-missing}}
 \centering
 \begin{tabular}{lrrrr}
 \toprule
@@ -351,46 +371,99 @@ EM Missing Data Model & $0.263$ & $0.132$ & $0.530$ &  $0.268$\\
 \end{tabular}
 \end{table}
 
-## Creating a Missing Data Model
+## EM Algorithm for the Ride Data
 
 In order to perform the algorithm, we need to specify a model for nonresponse.
-We will the same predictors that we do in Model 4 for ride rating---including
+We will use the same predictors that we do in Model 4 for ride rating---including
 a smoothing spline for time of day for weekdays and weekends---except
-we do not use random rider intercepts. We can specify a basic nonresponse model as
-
-\begin{equation}
-r_i \sim \text{Bernoulli}(\text{logit}^{-1} (\alpha + x_i \beta + \mathcal{S}(t_i))).
-\end{equation}
-
+we do not use random rider intercepts. 
 For the EM algorithm, we use Model 4 as our ride rating model and use the following
 model for the rating nonresponse mechanism:
 
 \begin{equation}
-r_i \sim \text{Bernoulli}(\text{logit}^{-1} (\alpha + y_i \beta_Y + x_i \beta + \mathcal{S}(t_i))).
+r_i \sim \text{Bernoulli}(\text{logit}^{-1} (\alpha_0 + y_i \alpha_y + 
+X_i \alpha_x + X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+(1 - X^\text{weekend}) \cdot f^\text{time} (t_i))).
 \end{equation}
 
-<!--
+
 \begin{table}[htb]
 \centering
-\caption{Comparison of fits of Model 4 and the EM Model\label{tab:em-modelfits}}
+\caption{Fit summaries for Model 4 and the EM Model\label{tab:em-modelfits}}
 \begin{tabular}{lm{4in}rrr}
 \toprule
 \textbf{Model} & \textbf{Separation Plot} & \textbf{AUC}\footnotemark\\
 \midrule
 Model 4 & \includegraphics{figure/model4-sep.pdf}
 & 0.802\\
-EM Model & \includegraphics{figure/model2-sep.pdf}
-& 0.807\\
+EM Model & \includegraphics{figure/em-separation-plot.pdf}
+& 0.763\\
 \bottomrule
 \end{tabular}
 \end{table}
 
--->
+<!-- discuss fits -->
+The fit for the EM algorithm seems to be worse. The AUC, shown in 
+`r ref("em-modelfits", type = "table")`, which was computed on
+the complete data, was lower than that of Model 4. 
 
-## EM Model Results
+
 
 \begin{table}[htb]
-\caption{Estimates for ride rating nonresponse mechanism. \label{tab:nonresponse-estimates}}
+\caption{Ride rating model estimates after EM algorithm \label{tab:em-model-estimates}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Parameter} & \textbf{Model 4} & \textbf{EM Model}\\
+\midrule
+Log(Length) & -0.147 & 0.205\\
+& \footnotesize (-0.290, -0.005) & \footnotesize (0.106, 0.304)\\
+Mean Temperature & 0.142 & 0.100\\
+& \footnotesize (0.004, 0.281) & \footnotesize (0.005, 0.196)\\
+Mean Wind Speed & 0.002 & -0.026\\
+& \footnotesize (-0.054, 0.057) & \footnotesize (-0.069, 0.016)\\
+Max Gust Speed & -0.005 & 0.020\\
+& \footnotesize (-0.031, 0.021) & \footnotesize (0.001, 0.039)\\
+Rainfall & 0.050 & 0.051\\
+& \footnotesize (-0.017, 0.117) & \footnotesize (0.009, 0.093)\\
+Rainfall 4-Hour & 0.022 & 0.017\\
+& \footnotesize (0.003, 0.041) & \footnotesize (0.003, 0.030)\\
+Intercept & -2.792 & -3.144\\
+& \footnotesize (-3.334, -2.250) & \footnotesize (-3.604, -2.684)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+<!-- explain the coef table -->
+There are two disagreements between the EM model and Model 4 for ride rating: 
+the coefficients for $x^\text{length}$ and $x^\text{rain}$. The former has
+flipped sign while the latter has much less uncertainty in its estimate. 
+
+The coefficients for the missing model, shown in 
+`r ref("nonresponse-estimates", type="table")` confirm our worry that many of the rides missing the rating
+are not bike rides. These model coefficients suggests that rides are much
+more likely to be missing if they have a negative rating. We hypothesized that
+there would be a weak negative effect of a negative rating on missingness; while
+any reasonable researcher wouldn't dismiss the estimates because the sign wasn't
+what was expected, the magnitude seems much more in line with the hypothesis
+that many of the missing ratings correspond to car rides. 
+
+It's tempting to suggest
+that longer rides tend to be missing, but they are also more likely to be rated 
+negatively; the distribution of ride lengths are actually about the same for
+rated and non-rated rides. But does it make sense that we would have the same
+distribution of ride lengths for rated and non-rated rides, if we suspect many
+of the non-rated rides are actually car rides? Yes, so long as we keep in mind
+that these are rides that have been misclassified as bike rides; we expect the
+classifier already filtered out car rides that were too long and fast to be
+bike rides.
+
+\begin{table}[htb]
+\caption[Estimates for ride rating nonresponse mechanism]{
+Estimates for ride rating nonresponse mechanism. The Basic Nonresponse
+Model is estimated based on the data with $y$ predicted by Model 4. The EM 
+Nonresponse Model is estimated with the EM algorithm, which uses the same
+model specifications. \label{tab:nonresponse-estimates}}
 \centering
 \begin{tabular}{lrrrr}
 \toprule
@@ -399,7 +472,7 @@ EM Model & \includegraphics{figure/model2-sep.pdf}
 $y$ & 0.730 & 1.035\\
 & \footnotesize (0.235, 1.224) & \footnotesize (0.493, 1.577) \\
 Log(Length) & -0.297 & -0.327\\
-& \footnotesize (-0.362, -0.232) & \footnotesize (-1.163, -0.771)\\
+& \footnotesize (-0.362, -0.232) & \footnotesize (-0.393, -0.262)\\
 Mean Temperature & 0.200 & 0.139\\
 & \footnotesize (0.139, 0.262) & \footnotesize (0.077, -0.262)\\
 Mean Wind Speed & 0.032 & 0.031\\
@@ -416,27 +489,8 @@ Intercept & -0.927 & -0.967\\
 \end{tabular}
 \end{table}
 
-\begin{table}[htb]
-\caption{Ride rating model estimates after EM algorithm \label{tab:em-model-estimates}}
-\centering
-\begin{tabular}{lrrrr}
-\toprule
-\textbf{Parameter} & \textbf{Model 4} & \textbf{EM Model}\\
-\midrule
-Log(Length) & -0.147 & 0.205\\
-& \footnotesize (-0.290, -0.005) & \footnotesize (-3.603, -2.684)\\
-Mean Temperature & 0.142 & 0.100\\
-& \footnotesize (0.004, 0.281) & \footnotesize (0.005, 0.196)\\
-Mean Wind Speed & 0.002 & -0.026\\
-& \footnotesize (-0.054, 0.057) & \footnotesize (-0.069, 0.016)\\
-Max Gust Speed & -0.005 & 0.020\\
-& \footnotesize (-0.031, 0.021) & \footnotesize (0.001, 0.039)\\
-Rainfall & 0.050 & 0.051\\
-& \footnotesize (-0.017, 0.117) & \footnotesize (0.009, 0.093)\\
-Rainfall 4-Hour & 0.022 & 0.017\\
-& \footnotesize (0.003, 0.041) & \footnotesize (0.003, 0.030)\\
-Intercept & -2.792 & -3.144\\
-& \footnotesize (-3.334, -2.250) & \footnotesize (-3.604, -2.684)\\
-\bottomrule
-\end{tabular}
-\end{table}
+Unfortunately, these models do not seem ready for use on the *Ride Report* data
+until the quality of data with missing ratings can be assured. Knock Software
+is planning on fixing this, so such an analysis may be viable within a year or
+two of collecting new data. (Because the accelorometer data is not saved, they
+cannot go back and attempt to reclassify old rides.)

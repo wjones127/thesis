@@ -1,1 +1,37 @@
-Hello!
+Given cyclists' commuting bicycle routes and their ratings of those routes, how
+can we determine which infrastructure features are not working for bicyclists?
+This is the question that first fascinated me when I started this thesis. As
+someone just getting into statistics, it was a mind boggling problem at the time,
+and even now I still don't have a complete answer; it turned out to be a larger
+research question than could fit in one undergraduate thesis. But here I make some
+substantial steps forward, refining the question ("how can we model how ride
+ratings are influenced by route, as well as weather, who is riding, and when
+they are riding?"), addressing part of the question (the non-route part), and 
+coming up with some ideas on how to proceed further.
+\par
+This thesis represents a year's worth of hard work and the most enlightening 
+educational experience I've had yet. It was a deep dive into how to do
+statistical modeling for a rich and complex data set with many open questions.
+During this undertaking, I couldn't be more thankful for the guidance of Andrew 
+Bray, my thesis adviser.
+\par
+The story of how I got interested in this data was just as much a story of 
+Reedies helping Reedies as it was of fascination with technical challenges.
+I first encountered *Ride Report* during Rennie Meyers' '15 presentation of her final
+project in the Introduction to Data Science class taught by Albert
+Kim in the spring of 2016. In a turn of luck, I found myself during the following summer
+interning at Switchboard (more formally known as Weathergram, Inc.), who shared
+an office with Knock Software, the creators of the *Ride Report* app. During
+that summer I got to talk with William Henderson '08 and Evan Heidtmann, the two
+developers at Knock, and became fascinated with the open questions in the data.
+I have to thank Rennie Meyers for sharing what she learned and
+Switchboard introducing me to William and Evan, but most of all thesis would not be possible
+without the generosity of William and Evan. They not only
+allowed me to examine the data they are obligated to keep as private as possible, 
+but hosted me for hours in their office while I ran and debugged my models.
+\par
+Few feats at Reed are possible without the support of loved ones, and I've been
+especially fortunate here. I got through this semester in no small part because
+of the times I spend sharing great food with my friend Xian; the loving reassurance and
+support of my partner Kiki; and, of course, the love and financial support of
+my mom Kathleen.

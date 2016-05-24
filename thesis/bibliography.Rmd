@@ -31,6 +31,6 @@ This is just for testing with more citations for the bibliography at the end.  A
 
 ---
 nocite: | 
-  @gelman, @cressie2011
+  @gelman, @cressie2011, @stan, @lme4, @gamm4, @Rlang
 ...
 

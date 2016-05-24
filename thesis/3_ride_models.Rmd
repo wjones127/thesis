@@ -30,7 +30,7 @@ library(lme4)
 ```
 
 
-# Modeling Rides and Riders
+# Modeling Rides and Riders {#model-chapter}
 
 Complex statistical models can accurately model intricate processes. But they
 also run the risk of overfitting to the data. To avoid this, we build up our models
@@ -59,7 +59,7 @@ Model 5   Additive model with spline for ride length
 
 Model 6   Remove random rider intercepts from Model 4
 -----------------------------------------------------------------
-Table: List of models we evaluate in this chapter. \label{tab:models}
+Table: Brief descriptions of Models 1--6 \label{tab:models}
 
 
 
@@ -67,17 +67,17 @@ Table: List of models we evaluate in this chapter. \label{tab:models}
 ## Six Models for Probability of a Negative Ride Rating {#ride-models}
 
 **Model 1**, which we will use as the baseline for comparing further models,
-is a multiple logistic regression model. Then, our first model will be,
+is a logistic regression model:
 
 $$ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + X_i \beta),$$
-
 where $\alpha \in \mathbb{R}$ and $\beta \in \mathbb{R}^p$ are parameters to be
-estimated. ($X$ is the matrix of rider-level predictors specified at the end of
+estimated. ($X$ is the matrix of ride-level predictors specified at the end of
 `r ref("data-notation", type = "header")`.)
 
 ```{r plot-rider-avgs, echo=F, results='asis'}
 label(path = "figure/rider_avgs.pdf", 
-caption = "The overall rates at which each rider gives a negative rating for a
+      caption = "Distribution of Average Rider Rating",
+alt.cap = "The overall rates at which each rider gives a negative rating for a
 ride varies greatly. This is our primary motivation for including rider intercepts
 and predictors.", 
       label = "rider-avgs", type = "figure", scale=1,
@@ -105,23 +105,23 @@ $$\alpha_j \sim N(0, \sigma^2_\alpha).$$
 
 Starting with **Model 3**, we address time of day, $t \in [0, 24)$ as a predictor.
 (We measure time of day in hours since midnight.) We use time of day to
-account for the all daily trends that may affect ratings, including as a
+account for all the daily trends that may affect ratings, including as a
 simple way to model the overall traffic level, which is difficult to model on
 its own. These patterns
-are cyclic and very non-linear, so we can't time as a linear term.
+are cyclic and very non-linear, so we can't model time as a linear term.
 One approach is to add sinusoidal terms with a period of one day.
  We would be interested in fitting a term,
 
 $$\beta \sin (T x^{\text{time}} + \phi).$$
 
 Estimating $\beta$ wouldn't be hard: we can easily estimate coefficents of
-tranformed terms; it's more difficult to estimate $T$ and $\phi$. But, we
+transformed terms; it's more difficult to estimate $T$ and $\phi$. But, we
 know that we want to restrict our terms to fitting trends that happen over the
 course of one day, so we can set $T = 2 \pi / d$, where $d$ is 24 hours or some
 fraction of that. 
 
-As for $\phi$, a trignometric transformation reframes the estimation of a phase
-shift parameter into the estimation of two coefficients for trignometric 
+As for $\phi$, a trigonometric transformation reframes the estimation of a phase
+shift parameter into the estimation of two coefficients for trigonometric 
 functions with no phase shift:
 
 \begin{align*}
@@ -130,7 +130,6 @@ functions with no phase shift:
 &= \beta \cos (\phi)) \sin (T x) + \sin (\phi) \cos (T x)\\
 &= \beta_1 \sin (T x) + \beta_2 \cos (T x),
 \end{align*}
-
 where $\beta_1 = \beta \cos (\phi)$ and $\beta_2 = \sin (\phi).$ At this point,
 we are now just estimating the coefficients of a couple of transformed variables,
 which can easily be done in any package that does generalized linear
@@ -151,45 +150,55 @@ one set for weekdays and one for weekends. More explicitly, we define the model,
 \end{split}
 \end{equation}
 
-For **Model 4** and **Model 5**, we abandon parametric methods and use a 
-cyclic non-parametric smoother to model time of day. 
-The only problem is that we need a way to combine our parametric
-and multilevel parts of the model with a new non-parametric part. This is
-where additive models come in.
 
-```{r plot-length-hour, echo=F, results="asis", eval=FALSE}
-label(path = "figure/length_prob_plot.pdf", 
-caption = "Approximate probability of stresfful rating by length. Probabilities
-as Binomial probability estimates, with exact confidence intervals, for a sliding
-window.", 
-      label = "length-prob-plot", type = "figure", scale=1,
-options = "tbh")
 
-label(path = "figure/hour_prob_plot.pdf", 
-caption = "Approximate probability of stresfful rating by time of day. Probabilities
-as Binomial probability estimates, with exact confidence intervals, for a sliding
-window.", 
-      label = "hour-prob-plot", type = "figure", scale=1,
-options = "tbh")
-```
+For **Model 4** we abandon parametric methods and use a cyclic non-parametric 
+smoother to model time of day, making our model,
 
-**Model 4** will introduce a cyclic cubic splines for time of day. 
+\begin{equation}
+y_i \sim \text{Bernoulli} \left(
+\text{logit}^{-1} \left( \alpha + \alpha_{j[i]} + X_i \beta + 
+X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+(1 - X^\text{weekend}) \cdot f^\text{time} (t_i) \right)
+\right),
+\end{equation}
+for $i = 1, \ldots, n$, where $\alpha_j$ is specified like Model 2 and 
+$f^\text{time.w}$ and $f^\text{time}$ are cyclic cubic spline terms for weekend
+and weekday rides, respectively, with knots at 0, 3, 6, 9, 12, 15,
+18, 21, and 24 (0, again) hours.
+
+**Model 5** extends Model 4 by adding a cubic spline for ride_length:
+
+\begin{equation}
+y_i \sim \text{Bernoulli} \left(
+\text{logit}^{-1} \left( \alpha + \alpha_{j[i]} + X_i \beta + 
+X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+(1 - X^\text{weekend}) \cdot f^\text{time} (t_i)
++ f^\text{length} (x^\text{log.length}_i)  \right)
+\right),
+\end{equation}
+for $i = 1, \ldots, n$, where $f^\text{length}$ is a cubic spline smoother.
+
+Finally, **Model 6** is identical to Model 5, but without the rider intercepts:
+
+\begin{equation}
+y_i \sim \text{Bernoulli} \left(
+\text{logit}^{-1} \left( \alpha + X_i \beta + 
+f^\text{time} (t_i)  \right)
+\right),
+\end{equation}
+for $i = 1, \ldots, n$, where $f^\text{time}$ is a cyclic cubic spline term,
+with the same knots as in Model 4.
+
 
 
 
 
 ## Model Evaluation
 
-To fit the data, we got all of the rides in Portland, OR from December 3, 2014 to
-February 8, 2016 for riders that had over 20 rides. There were 35,370
-rides, 14,032 of which were rated. Overall, 10.88
-percent of these rides were given a negative rating. There were 518 
-riders in the data set.
-
-<!--
 \begin{table}[htb]
 \centering
-\caption{Model fit summaries for full-data fittings.\label{tab:modelfits}}
+\caption{Fit summaries for Models 1--6.\label{tab:modelfits}}
 \begin{tabular}{lm{4in}rrr}
 \toprule
 \textbf{Model} & \textbf{Separation Plot} & \textbf{$\log (\mathcal{L})$} & \textbf{AIC} &
@@ -212,42 +221,40 @@ Model 6 & \includegraphics{figure/model6-sep.pdf}
 \end{table}
 \footnotetext{Area under ROC curve estimated with  10-fold cross-validation.}
 
--->
+To fit the data, we got all of the rides in Portland, OR, from December 3, 2014 to
+February 8, 2016 for riders that had over 20 rated rides. (We only look at riders
+with a certain number of rides to make sure we get can get estimates for rider-level
+parameters, like rider random intercepts, that aren't too uncertain.) There were  25,397
+rides, 14,032 of which were rated. Overall, 10.88
+percent of these rides were given a negative rating. There were 138 
+riders in the data set.
 
 The separation plots in `r ref("modelfits", type = "table")` give a clear initial picture
 of how these model fits compare.  Model 1 performs very poorly compared to those
 that include rider intercepts, assigning the same probability to most observations. 
 Models that include the rider intercept perform similarly to each other.
-The log likelihoods and AIC scores, shown in `r ref("modelfits", type = "table")`,
+The log likelihoods and AIC,^[Akaike Information Criterion (AIC) is a metric that
+penalizes the $\log (\mathcal{L})$ with the number of parameters estimated $k$,
+with lower values being better. It is defined as $\text{AIC} = 2k - 2 \log(\mathcal{L})$.]
+shown in `r ref("modelfits", type = "table")`,
 corroborate this. Adding time dependency doesn't seem to impact predictive ability.
 We will see later, however, that it gives a fascinating result to interpret.
 
-
-```{r separation-plots, echo=F, results='asis', eval=FALSE}
-label(path = "figure/sep_plots.pdf", 
-caption = "Separation plots for models for data, with models fit to the full sample.", 
-      label = "sep-plots-model1", type = "figure", scale=1,
-options = "tbh")
-#label(path = "figure/sep_plots_out_of_sample.pdf", 
-#caption = "Separation plots for each model, for out of sample data. Models were
-#fit to a training set of size [insert size here] and then predictions were made for the #testing
-#set of size [insert size here].", 
-#      label = "sep-plots-oos", type = "figure", scale=1,
-#options = "tbh")
-```
-
 The gains from the rider intercepts are great, but we are compelled to ask: how 
-much of that gain could have been achieved with randomly chosen groups? 
-\textit{i.e.} if riders were randomly assigned to rides, would the flexibility
+much of that gain could have been achieved with randomly chosen groups? In other
+words, if riders were randomly assigned to rides, would the flexibility
 in the model created by allowing intercepts to vary increase predictive performance
 to the same degree?
-To test this, we ran a Model 4 after we randomly assign the rides a rider. This
+To test this, we ran a Model 4 after we randomly assign the rides a rider, by
+randomly permuting the rider column. This
 quick test nullified this skepticism, as you can see in the resulting separation
 plots in `r ref("sep-plots-intercept-test")`.
 
 ```{r intercept-test, echo=F, results='asis'}
 label(path = "figure/intercept_test_plot.pdf", 
-caption = "Separation plots for models 2 compared to a similar model where
+      caption = "Separation plots for models 2 compared to a similar model where
+riders are randomly assigned to rides",
+alt.cap = "Separation plots for models 2 compared to a similar model where
 riders are randomly assigned to rides. This test demonstrates that the 
 improvement in predictive performance provided by the rider intercepts
 was not coincidence.", 
@@ -255,52 +262,13 @@ was not coincidence.",
 options = "tbh")
 ```
 
-<!--
-Though the ability of the later models to separate the observations is about the
-same, their fit to the data does vary a little. We can see this in the predicted
-probability versus fitted probability plot in `r ref("prob-eval-plots")` and
-`r ref("prob-eval-plots-oos")`.
--->
-```{r prob-eval-plots, echo=F, results='asis', eval=FALSE}
-label(path = "figure/prob_eval_plots.pdf", 
-caption = "Approximate probability of stresfful rating by time of day. Probabilities
-as Binomial probability estimates, with exact confidence intervals, for a sliding
-window.", 
-      label = "prob-eval-plots", type = "figure", scale=1,
-options = "tbh")
-
-label(path = "figure/eval_plot_out_of_sample.pdf", 
-caption = "Approximate probability of stresfful rating by time of day. Probabilities
-as Binomial probability estimates, with exact confidence intervals, for a sliding
-window.", 
-      label = "prob-eval-plots", type = "figure", scale=1,
-options = "tbh")
-```
-
-
-
-
-
-```{r rider-intercepts, echo=F, results='asis', eval = FALSE}
-label(path = "figure/rider_intercept_plot.pdf", 
-caption = "Approximate probability of stresfful rating by time of day. Probabilities
-as Binomial probability estimates, with exact confidence intervals, for a sliding
-window.", 
-      label = "rider-intercept-plot", type = "figure", scale=1,
-options = "tbh")
-```
-
-
-
 ## Model Results
-
-
 
 
 \begin{table}[htb]
 \centering
 \def\arraystretch{1.3}
-\caption{Regression coefficients for Model 1, Model 2, Model 4, and Model 6. 
+\caption[Regression coefficients for Models 1, 2, 4, and 6.]{Regression coefficients for Model 1, Model 2, Model 4, and Model 6. 
 95\% confidence intervals are given in parentheses.\label{tab:modelcoef}}
 \begin{tabular}{lllll}
 \toprule
@@ -332,29 +300,46 @@ Intercept & -2.2868 & -3.075 & -3.127 & -2.313\\
 \end{table}
 
 `r ref("modelcoef", type = "table")` presents the fixed effect estimates for
-our models. 
+our models. Length has a robust strong negative effect. This makes sense if we
+think of length as the only information we have about route in these models: it
+seems routes that are longer tend to be less likely to be rated negatively. 
+Perhaps longer rides tend to be for leisure or sport rather than commuting, so
+and so are less likely to go along routes with high traffic and other dangers.
+Temperature also seems to have a small effect. It could be the case that the
+temperature itself is important, or perhaps season is a confounding factor. It
+could be the case that the type of rides taken during the warmer months are
+more likely to be rated negatively. Wind and gust speed don't seem to have 
+robust effects. These models suggest that four hour cumulative rainfall was
+more important than rainfall during the hour of the ride. This supports our
+suspicion that weather effects that are more relevant to safety than comfort---
+like wet road and puddles rather than rain at the time of a ride---are important
+in determining a cyclist's rating of their ride. These coefficients, however,
+aren't nearly as enlightening as the time of day fits.
+
+
 <!-- Add more interpretation here soon!!!!!!!! -->
 
 \begin{figure}[htb]
 \centering
 \includegraphics{figure/time_fit_plot.pdf}
 \includegraphics{figure/time_fit_plot_6.pdf}
-\caption{Predicted probabilities of a negative rating by time for a typical ride.
+\caption[Predicted probabilities of a negative rating by time for a typical ride]{
+Predicted probabilities of a negative rating by time for a typical ride.
 The rider was chosen so the intercept was closest to the mean intercept for model
 5. The median length and average mean temperature were used, and all other
 predictors were set to zero. The dotted lines show $\pm 2$ standard errors from
-the predictions.}
+the predictions.\label{fig:model-time-fit}}
 \end{figure}
 
 
 
-The marginal fits for time of day, shown in `r ref("model1-time-fit")`,
+The marginal fits for time of day, shown in `r ref("model-time-fit")`,
 are predictable. On weekdays, the probability of a negative rating peaks in the
 afternoon from 4--6 p.m., around when we expect rush hour traffic, and on weekends it stays
 steady throughout the day. While Model 4 and Model 5 give similar fits for time
 of day, Model 3's predictions peak at different times on weekdays and exhibit
 much more variability on weekends. There are two probable reasons for these 
-differences: first, the sinusoidal terms are less flexibile than the splines; 
+differences: first, the sinusoidal terms are less flexible than the splines; 
 second, the splines, because they are non-parametric functions, penalize
 complexity of the fit while the parametric sinusoidal form 
 does not, making the splines more conservative in their ``curviness.'' 
@@ -365,48 +350,49 @@ the functional form to any strict parametric form.
 
 But these marginal time-of-day fits don't just tell a story about our time terms;
 they also reveal part of why the random rider intercepts are such powerful predictors.
-Notice that in comparing `r ref("model1-time-fit6")` to `r ref("model1-time-fit")`,
+Notice that in comparing Model 6 to the other models in `r ref("model-time-fit")`,
 the scale at which the Model 6 time
 fitted probabilities vary is much larger than the scale at which the other
-models' predictions vary. (The differences is so large we had to show them in
-separate plots!) Without allowing for varying rider intercepts, the time terms
+models' predictions vary. Without allowing for varying rider intercepts, the time terms
 take on a significant role. Yet, interestingly, the time term has nowhere near 
 the amount of information that the rider intercepts seem to encode,
 according to the separation plots in `r ref("modelfits", type = "table")`. 
 
-A clearer picture of what is going on is painted in `r ref("time-pred-plot")`.
-The predictions of Model 1, which has a fixed intercept and no time dependence, don't vary by
-time of day. The models with random intercepts (2--5) show 
- strong temporal patterns, with concentrated spikes in the morning
-and evening. Model 6, which had the time of day spline but a fixed intercept,
-has a temporal pattern, but does not represent the same degree time dependence
-that the random intercept models do.
 ```{r time-predictions, echo=F, results='asis'}
 label(path = "figure/time_pred_plot.pdf", 
-caption = "Each of the models predictions for all rides with time of day on the x-axis.
-Notice how starting with model 2, daily trends start to emerge. This indicates that the
-rider intercepts are picking up on time of day trends, which must be reflected in riders
+      caption = "Predicted probabilities of negative rating by time of day for Models 3--6",
+alt.cap = "Predicted probabilities of negative rating by time of day for Models 3--6.
+Notice how starting with Model 2, daily trends start to emerge. This indicates that the
+rider intercepts are picking up on time of day trends, which must be reflected in a rider's
 typical ride.", 
       label = "time-pred-plot", type = "figure", scale=1,
 options = "tbh")
 ```
 
-One should be cautious about interpreting the intercepts. It's tempting to say
-they represent a riders general tendency to rate rides negatively, but this is
-ignoring their typical route. Just like how figure `r ref("time-pred-plot")`
-demonstrates that riders have unique patterns of what times of days they take
-rides, riders also likely have very particular routes that make up the majority
-of their rides. Because our models do not take into account the route, the
-intercepts are likely encoding the information about a riders typical route.
+`r ref("time-pred-plot")` paints a clearer picture of what is going on.
+These models show two different ways to look at the time of day pattern in ride
+rating: Model 2 suggests *who is riding* determines these patterns while Model 6
+suggests there is something inherent in that time of day, such as traffic,
+that determines these patterns. The models between fit a combination of these,
+but as we saw in `r ref("model-time-fit")`, the time dependence is more than an
+order of magnitude weaker after accounting for the rider intercepts. The two
+black pillars of rides in the predictions of Models 2--5 line up with when we
+expect commuters to be riding, suggesting that that the riders with high rider
+intercepts are commuters. The converse, however, is not true: a great number
+of rides during commuting times are predicted to have almost zero probability of
+receiving a negative rating.
 
-The fact that riders have apparent patterns of time of ride (and very likely
-route of ride), indicates there will be some value in trying to differentiate 
-the types of riders that are present in this data. Indeed, one way of looking
-at the range of probabilities of giving a negative rating different riders have
-(demonstrated in figure `r ref("rider-pred")`) is that some are more 
-likely to offer useful information. In the next chapter, we will attempt to
-pick apart different groups of riders, and attempt to characterize their patterns
-of when and how long they ride. 
+What explains this relationship between the temporal patterns and the rider
+intercepts? We suspect ride route is a confouding factor here. 
+`r ref("time-pred-plot")` confirms our suspicion that riders have particular
+schedules they stick to; so it's also likely, given that these are mostly 
+commuting cyclists, that most of their rides follow the same route as well. These
+models ignore ride route, so we suspect the typical ride route is encoded in the
+rider intercepts; *i.e.* a rider whose commuting route goes through many of the
+most stressful intersections and streets in Portland will likely have a higher
+intercept than most riders. This hypothesis can only be tested, however, when
+future research develops models with random rider intercepts and a model for
+how routes effect ratings. 
 
 <!--
 ```{r rider-predictions, echo=F, results='asis', eval = FALSE}

@@ -33,18 +33,18 @@ individual rides, including the GPS trace, the rider, and start timestamp were
 provided by Ride Report. Weather data were collected from Weather Underground's
 archive of the KPDX weather station and a Portland Fire Bureau station.
 
-Our goal in this chapter is to discuss this data and what considerations we
+Our goal in this chapter is to discuss these data and what considerations we
 should have in mind before exploring it in depth. This includes how and by whom
-the data was collected, who and what is this data actually representative of,
+the data were collected, who and what this data are representative of,
 and what samples were taken of the data.
 
 Some of these considerations, such as the limited demographics represented in 
 the Ride Report data, pose serious limitations to how our inferences can be
-generalized. Others, such the large number of missing responses in the Ride
+generalized. Others, such as the large number of missing responses in the Ride
 Report data, motivate the analysis we are doing in this thesis.
 Finally, there are other considerations which we will acknowledge here,
 but addressing them is out of the scope of this thesis. This data set contains
-an abunance of potential research questions, only a fraction of which could be
+an abundance of potential research questions, only a fraction of which could be
 reasonably addressed in one thesis.
 
 ## Ride Report
@@ -56,25 +56,25 @@ valuable to city planners.^[Knock's other project is making a cheaper bicycle
 counter for cities to monitor traffic flow, again intended to be sold to cities 
 wishing to improve bike infrastructure.]
 
-Ride Report's approach to crowdsourcing this data is particularcly important
+Ride Report's approach to crowd sourcing these data is particularly important
 to understand. The app automates every piece of the data collection process 
 except for the rating given by the rider. Thus, the app casts aside nuanced 
 and (somewhat) reliable human input in favor of increasing sample size:
 one could imagine a similar app where users have more control over how the
 route is recorded, have the ability to rate on a more fine-grained scale, and
-are given more direction in what they are rating for. This tradeoff causes two
+are given more direction in what they are rating for. This trade off causes two
 problems with the reliability with the data.
 
 <!-- how does it work? -->
 Before we get into the potential issues in the data collection, though, let's examine
-the data collection process itself. When installed on a persons phone, the 
+the data collection process itself. When installed on a person's phone, the 
 Ride Report app attempts to automatically detect when
-the user starts riding their bicycle, based acceleromoter data, when a user
+the user starts riding their bicycle, based accelerometer data, when a user
 leaves a familiar Wi-Fi network, and some other pieces of information.
 When the app detects the start of a ride, it starts recording a GPS trace.
 At the end of the users ride, the app detects them getting of their bike (in
 a similar process to how it detected the start of a ride) and prompts them to 
-give a rating of the ride. The ride data is saved then, even if the user does
+give a rating of the ride. The ride data are saved then, even if the user does
 not provide a rating.
 
 <!-- potential problems in process -->
@@ -89,28 +89,30 @@ no way to join split rides back together.
 
 ```{r, echo=F, message=F, results='asis'}
 label(path = "figure/ride_report_rating.jpg", 
-caption = "The Ride Report app's interface has changed significantly between
+      caption = "The Ride Report app's interface",
+alt.cap = "The Ride Report app's interface has changed significantly between
 versions, including the rating text displayed after a ride. This is the current
 version as of Februrary 2015.", 
       label = "ride-rating", type = "figure", scale=.2,
 options = "tbh")
 ```
 
-The app only recently became publicly availible and has undergone significant
-changes in the course of it's life. In particular, while the ratings have always
-been binary, the labels have changed at various points in time. For a while the
+The app only recently became publicly available and has undergone significant
+changes in the course of its life. In particular, while the ratings have always
+been binary, the labels have changed at various points in time. At one point the
 rating labels were "Stressful" and "Chill", while now they are labelled 
-"Recommend" and "Avoid" (see `r ref("ride-rating", type="figure")`.) Other 
-fundamentals of the data collection process, have remained constant.
+"Recommend" and "Avoid" (see `r ref("ride-rating", type="figure")`). Other 
+fundamentals of the data collection process---such as the binary ratings,
+the automatic collection of GPS traces of routes---have remained constant.
 
 <!-- who do the rides represent? -->
-The data colletion method itself has some problems, but there also may be some
-biases in the population of riders using the app. The app is only availible on 
+The data collection method itself has some problems, but there also may be some
+biases in the population of riders using the app. The app is only available on 
 iOS, so only iPhone owners could use this application which may imply a bias 
 toward riders of higher socioeconomic status. At the time of the start of the 
 thesis, the app was in private beta, meaning only people who actively sought out using
 the app were able to use it. Now the application is public and on the Apple 
-App Store, making it more widely availible. So many of the earlier rides may be
+App Store, making it more widely available. Due to these issues, many of the earlier rides may be
 people within the developer's personal network. Unfortunately, it's hard to make
 any solid conclusions about the users of the app because Ride Report doesn't 
 collect any demographic data about their riders. 
@@ -118,11 +120,11 @@ collect any demographic data about their riders.
 <!-- data privacy and sampling -->
 
 One other issue with the Ride Report data guided our analysis: privacy.
-Because the data involves timestamps and GPS locations of people's commutes, the
+Because the data involves time stamps and GPS locations of people's commutes, the
 data is very sensitive: one could easily infer someone's home and workplace
-based on their most commons routes. In fact, this data is protected by an end-user
+based on their most common routes. In fact, this data is protected by an end-user
 license agreement (EULA) which prevents sharing of data, without the explicit 
-permission of those involved. This presented a logistic challenge: how were we
+permission of those involved. This presented a logistical challenge: how were we
 to do inference and data exploration without access to the data?
 
 By agreement with Knock Software, identifying data must be kept private. With
@@ -130,7 +132,7 @@ permission from five riders, Knock was able to give us a small subset consisting
 of all the rides from those five riders, to be kept confidential. That is the
 data set we used for prototyping models and some basic exploratory analysis. 
 Knock also agreed to allow us to run models fitting scripts on larger samples
-of their dataset, as long as they were performed on their computers, with
+of their data set, as long as they were performed on their computers, with
 no identifying data leaving their system.
 
 While at first this set up seems like an inconvenience, it actually has some 
@@ -138,7 +140,11 @@ advantages. One of the pitfalls of having an entire data set, especially a high
 dimensional one, is that in performing exploratory analyses it is often too
 easy to find spurious "statistically significant" results. Instead, we must
 come up with our models before running them, greatly limiting the choices we
-can make in the garden of forking paths.
+can make in the "garden of forking paths."^["The garden of forking paths," a 
+reference to the short story by Jorge Luis Borges, is a term coined by Andrew
+Gelman to refer to the infinite number of choices researchers have in analyzing
+a set of data, which often allows for enough flexibility to discover
+coincidences @gelman2013.]
 
 
 <!-- 
@@ -161,8 +167,8 @@ join in data about the weather conditions during the ride, including
 - whether the roads are wet or have puddles,
 - wind and gust speed.
 
-We include the first two, temperature and percipitation, to account for rider
-comfort. A swealtering, frigid, or stormy day could make an unpleasant 
+We include the first two, temperature and precipitation, to account for rider
+comfort. A sweltering, frigid, or stormy day could make an unpleasant 
 experience for a bicyclist and thus could lead to more negative ratings.
 
 On the other hand, we include the last two, wet road and gust speed, as factors
@@ -178,7 +184,7 @@ may affect rider rating.
 ```{r, results='asis', echo=F, warning=F, message=F}
 weather_stations <- data.frame(lat = c(45.5887089, 45.5219685),
                                long = c(-122.5968694, -122.670755),
-                               label = c("KPDX Weather", "PFB Rain Guage"))
+                               label = c("KPDX Weather", "PFB Rain Gauge"))
 portland_map <- get_map("portland, oregon",
                         maptype="roadmap",
                         color="bw",
@@ -193,10 +199,11 @@ weather_station_map <- ggmap(portland_map) +
 ggsave("figure/weather_station_map.pdf", weather_station_map, width = 4.5, height = 3.5)
 
 label(path = "figure/weather_station_map.pdf", 
-caption = "Positions of weather data collection sites. Daily weather information
+      caption = "Locations of weather data collection sites",
+alt.cap = "Locations of weather data collection sites. Daily weather information
 was collected at the KPDX weather station at Portland International Airport. 
-Hourly percipitation data was collected at the Portland Fire Bureau's rain
-guage in downtown Portland.", 
+Hourly precipitation data were collected at the Portland Fire Bureau's rain
+gauge in downtown Portland.", 
       label = "weather-stations", type = "figure", scale=1,
 options = "tbh")
 ```
@@ -210,20 +217,20 @@ weather.
 
 For daily summaries of weather conditions, we used weather history
 from the KPDX weather station at Portland International Airport downloaded from
-Weather Underground. From this we were able to get daily weather data, including
+Weather Underground.^[@wunderground] From this we were able to get daily weather
+data, including
 
 - Average, minimum, maximum temperature for the day.
-- Total percipitation.
+- Total precipitation.
 - Mean wind speed, as well as gust speed (speed of brief, strong winds.)
 
 We also got hourly rainfall data from a data stream at the Portland Fire Bureau
-Rain Gage at 55 SW Ash St., which is just about the geographic center of
-Portland. This just gives raw uncorrected rain guage data, but gives us a fine
+Rain Gage at 55 SW Ash St.,^[@pdxrain] which is just about the geographic center of
+Portland. This just gives raw uncorrected rain gauge data, but gives us a fine
 grain look at how much rain there has been recently. 
 
 For daily weather data, such as temperature highs and average wind speed, we use
-information from the KPDX weather station. This weather station is the best 
-calibrated in the area. It is further from the geographic center of the rides
+information from the KPDX weather station. It is further from the geographic center of the rides
 we are examining, but because the weather is daily summary statistics, we
 don't expect closer weather stations to be much more informative.
 `r ref("weather-stations", type="figure")` shows the geographic positions of
@@ -232,17 +239,18 @@ these two stations.
 
 ## Notation for the Joined Data Set {#data-notation}
 
-We combined the ride records with weather data by joining by start datestamp of
-the ride. We will denote our set of ride-level predictors, each of which is a 
-column vector as,
-- $x^\text{length}$, ride length, scaled to have mean 0 and standard deviation of 1
+We combined the ride records with weather data by joining by start date stamp of
+the ride. We will denote our set of ride-level predictors, each of which is an
+$n$ by 1 column vector as,
+
+- $x^\text{length}$, log ride length, scaled to have mean 0 and standard deviation of 1
 - $x^\text{rain}$, rainfall during hour of ride, in tenths of inches
 - $x^\text{rain4h}$, rainfall during past four hours before ride, in tenths of inches
 - $x^\text{wind}$, mean wind speed for the day, in miles per hour
 - $x^\text{gust}$, max gust speed for the day, in miles per hour^[Gust speeds are
 the max speeds of winds that are fast, highly variable, and short-term. For METAR
 weather stations, which the KPDX station is, gust speeds report the maximum wind
-speed when there were rapid fluxations in wind speed with at least 10 knots in 
+speed when there were rapid fluctuations in wind speed with at least 10 knots in 
 the difference between the lows and highs.]
 - $x^\text{temp}$, average temperature, in degrees Fahrenheit for the day.
 
@@ -250,11 +258,12 @@ We will often represent this set of predictors as the ride-level predictor
 matrix $X = (x^\text{length} \; x^\text{rain} \; x^\text{rain4h} \; x^\text{wind} \;
 x^\text{gust}\; x^\text{temp}).$ We also have the predictor $t \in [0, 24]^n$, 
 representing the time of day of the ride, measured by hours since midnight. 
-(Because of it's special role in building our models, we use the simple notation
-of a single letter for it.)
+(Because it must be modelled in a different fashion than the other variables, 
+we use the simple notation of a single letter for it.)
 
-Let $Y_i = 1$ if the $i$th ride received a negative rating, and $Y_i = 0$ if it 
-received a positive rating. Choice of coding which events are 0's and which are
+Let $y_i = 1$ if the $i$th ride received a negative rating, and $y_i = 0$ if it 
+received a positive rating, for $i = 1, \ldots, n$. Choice of coding which events
+are 0's and which are
 1's is arbitrary when making logistic regression models, though we made this 
 choice because for the sake of our analysis, negatively rated rides are more
 interesting events. For urban planning applications, they define the areas that

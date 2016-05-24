@@ -5,14 +5,10 @@ division: 'Mathematics and Natural Sciences'
 advisor: 'Andrew Bray'
 #altadvisor: 'Your Other Advisor'
 # Delete line 6 if you only have one advisor
-department: 'Mathematics'
-title: 'Hierarchical Models for Crowdsourced Bicycle Route Ratings'
+department: 'Mathematics - Statistics'
+title: 'Multilevel Models and Missing Data Models for Crowdsourced Bicycle Route Ratings'
 abstract: |
   `r paste(readLines('abstract.Rmd'), collapse = ' ')`
-acknowledgements: |
-  `r paste(readLines('acknowledgements.Rmd'), collapse = ' ')`
-dedication: |
-  Dedicated to Hudson.
 preface: |
   `r paste(readLines('preface.Rmd'), collapse = ' ')`
 bibliography: bib/thesis.bib

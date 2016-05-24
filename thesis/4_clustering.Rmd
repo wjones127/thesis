@@ -29,7 +29,7 @@ library(reedtemplates)
 
 Given the results from last chapter, there is a clear need to understand what
 kinds of riders are in this data set. To do that, we identify predictors 
-that differentiate types of riders and then use these variables
+that differentiate riders and then use these variables
 to identify clusters of riders. We assess how these predictors do as rider-level 
 predictors for the rider intercepts. 
 
@@ -40,17 +40,17 @@ provide to clients, yet our model results show that differentiating riders is
 crucial to getting good estimates in our models. If we can identify clusters of 
 riders in the data set
 that give us nearly the same information as grouping by individuals did, these
-could be provided by Ride Report without nearly the same level of risks to
+could be provided by Ride Report without the same level of risks to
 user privacy as identifying individual riders.
 
 ## Extracting Features and Determining Clusters
 
-We characterized riders based on their rides because Ride Report does not collect data
+We characterized riders based on their rides because *Ride Report* does not collect data
 about their users besides their rides and email address. We limited our exploration
 to riders that had over 20 rated rides, in order to focus on riders 
 who had been using the app for some time and had an identifiable pattern of rides.
 
-Cyclists patterns in their rides are complex, particularly their time patterns.
+Cyclists' patterns in their rides are complex, particularly their time patterns.
 Computing their mean ride length for weekends was useful, but mean time of day
 for their rides does not capture anything meaningful. So we took care in selecting
 features that distinguished different rider patterns we saw when exploring the
@@ -59,16 +59,18 @@ data.
 \begin{figure}[htb]
 \centering
 \includegraphics{figure/time-designations.pdf}
-\caption{These intervals define the time designations we used in clustering. 
+\caption[Time intervals used for morning, lunchtime, and evening in rider feature
+extraction]{Time intervals used for morning, lunchtime, and evening in rider feature
+extraction. These intervals define the time designations we used in clustering. 
 The proportion of each riders rides in each of these time intervals made up three
 of our features.\label{fig:time-splits}}
 \end{figure}
 
-First, we define the collection of cyclist $j$'s rides as $H_j = \{ i | j[i] = j \}$. This
+<!--First, we define the collection of cyclist $j$'s rides as $H_j = \{ i | j[i] = j \}$. This
 index set can be partitioned into the rides that occured on the weekend, 
 $H_j^\text{weekend} = \{ i | i \in H_j, x_i^\text{weekend} = 1\}$, and those
 that occurred on weekdays, $H_j^\text{weekday} = H_j \setminus H_j^\text{weekend}$.
-Then we define the following for each rider $j$: 
+Then--> We define the following for each rider $j$: 
 frequency of rides^[We define frequency of a cyclist's rides as the number of
 rides divided by the difference between the time of the most recent ride and
 time of the first ride. (Units are arbitrary, because we standardized all of our
@@ -80,59 +82,69 @@ weekday rides during morning rush ($u^\text{morning}_j$), lunch rush
 ($u^\text{lunch}_j$), and evening rush ($u^\text{evening}_j$). The time intervals
 that describe the morning, lunch, and evening rush are shown in `r ref("time-splits")`. 
 
+```{r choosing_k, echo=F, results="asis"}
+label(path = "figure/choice_k.pdf", 
+      caption = "Comparing total within sum of squares for different $k$ for $k$-means clustering of riders",
+alt.cap = "Comparing total within sum of squares for different $k$ for $k$-means clustering of riders.", 
+      label = "choosing_k", type = "figure", scale=0.8,
+options = "tbh")
+```
+
 Selecting variables for a cluster analysis is difficult, for the reason that 
 many choices about what to use are arbitrary. We have chosen these variables,
 but two important other choices remain: what scales and transformations should
 these variables have? We chose here to transform all variables to be approximately
 gaussian---eliminating the right skew that was present in most of these features
 with log and square root transformations---and standardizing them by subtracting
-their mean and dividing by their standard deviation. Future research may find
-more appropriate ways to select features for clustering, but in our approach
+their mean and dividing by their standard deviation.
+When clustering, the scaling of variables determines how much weight each of them
+has in determining the clusters.
+Future research may find more appropriate ways to select features for clustering, 
+but in our approach
 here we stick to a naive and simple approach to see what we can learn.
 
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.5\textwidth]{figure/cluster_scatter1.pdf}\hfill
+\includegraphics[width=.5\textwidth]{figure/cluster_scatter3.pdf}
+\caption[Rider clusters identified by $k$-means clustering]{
+Rider clusters identified by $k$-means clustering. The triangles represent
+the centroids (computed as the mean) of the cluster members. \label{fig:cluster-scatter}}
+\end{figure}
+
 With the rider-level predictors in hand, we clustered the riders using  $k$-means
-clustering. To choose the number of clusters,
+clustering, which groups a set of points into the $k$ clusters that minimize the
+within-cluster sum of squared distance to the cluster centroids.^[$k$-means clustering
+is fit using a hueristic algorithm, which assigns points random to clusters, and
+then repeatedly recomputes the cluster centroids and reassigns the points to the
+cluster with the nearest centroid, until the clusters stop changing. This algorithm
+is fast, but the result is sensitive to the initial random assignment, so it is
+run many times. See page 460 of @esl for more details of $k$-means clustering.] 
+To choose the number of clusters,
 we assessed the total of the sum of squares within each cluster for different
 values of $k$, shown in `r ref("choosing_k")`, and selected $k = 4$ as the point
 where we thought after which there was little value in having more clusters.
 
-```{r choosing_k, echo=F, results="asis"}
-label(path = "figure/choice_k.pdf", 
-caption = "Total within sum of squares of each cluster, by number of clusters ($k$).", 
-      label = "choosing_k", type = "figure", scale=1,
-options = "tbh")
-```
-
-\begin{figure}[htb]
-\centering
-\includegraphics[width=.33\textwidth]{figure/cluster_scatter1.pdf}\hfill
-\includegraphics[width=.33\textwidth]{figure/cluster_scatter2.pdf}\hfill
-\includegraphics[width=.33\textwidth]{figure/cluster_scatter3.pdf}
-\caption{Rider clusters identified by $k$-means clustering. The triangles represent
-the centroids (computed as the mean) of the cluster members. \label{fig:cluster-scatter}}
-\end{figure}
-
-Looking at `r ref("cluster-scatter")`, the clusters split the data into the
-four quadrants of the first two principal components of the rider data. This 
-makes sense, given `r ref("choosing_k")` only showed small reductions in total within
-sum of squares as $k$ got larger. Despite having failed to identify distinct
-clusters, studying these different groups still offers some valuable insight
-into how cylists differ in their ride patterns.
-
 ```{r cluster-patterns, echo=F, results="asis"}
 label(path = "figure/cluster_patterns.pdf", 
-caption = "Patterns of ride length and ride time of day for each cluster..", 
+caption = "Patterns of ride length and ride time of day for each cluster.", 
       label = "cluster-patterns", type = "figure", scale=1,
 options = "bht")
 ```
 
-If we look at the length and time patterns of the clusters, shown in 
-`r ref("cluster-patterns")`, it's clear that these aggregate patterns give some
-distinct characterizations.
+Looking at `r ref("cluster-scatter")`, the clusters split the data into the
+four quadrants of the first two principal components of the rider data. These
+clusters appear to be less distinct groups than a partition of the space. 
+Regardless, they still provide some useful information about riders. Cluster
+2 seemed to pick out more casual riders, with fewer rides per week and more 
+weekend rides than the other clusters, as shown in the visible in the right
+panel of `r ref("cluster-scatter")`. This is seen more clearly in
+`r ref("cluster-patterns")`, where there aren't strong weekday commuting patterns
+for cluster 2, but there are for clusters 1 and 3.
 Clusters 1 and 3 seem to be the groups that are the most consistent
 commuters, but are differentiated by the typical length of their weekend rides.
 Clusters 2 and 4 show much more variance in the timing of their weekday rides, with
-cluster 2 having more consistently long weekend rides. 
+cluster 4 having more consistently long weekend rides. 
 
 
 ```{r uniform-test, echo= FALSE, eval=FALSE}
@@ -186,7 +198,7 @@ with $(\gamma_0, \gamma)$ being the group-level parameters we estimate.
 
 This model should be comparable to Model 2, though because we are trying to
 get estimates of the rider-level predictor parameters, we make use of \textit{Stan}
-instead of `lme4`.Though we would prefer to use
+instead of `lme4`. Though we would prefer to use
 a model similar to Model 4 from the previous chapter (the one with smoothing
 splines for time of day) the current additive mixed models package `gamm4` (which
 uses `lme4` to fit the mixed models part) does not support estimating the
@@ -218,15 +230,18 @@ $\sigma_\alpha$ & 1.47 & 1.27 & 1.69\\
 \end{tabular}
 \end{table}
 
-The ride-level predictor coefficients from the fitted model, are unimpressive.
-The variance in the rider intecepts not captured by the predictors, quantified
-with $\sigma_\alpha$, is high. 
+The ride-level predictor coefficients from the fitted model, however, are unimpressive.
+The variance in the rider intercepts not captured by the predictors, quantified
+with $\sigma_\alpha$, is high, and not one of the rider-level predictors have a
+95\% confidence interval that does not contain zero. (In fact, many are centered
+near zero.) These features may differentiate riders, but they don't give much
+information about how they rate their rides.
 
 
 ## Cluster Intercepts Versus Rider Intercepts
 
 Do these clusters provide similarly useful information that we got from 
-introducing rider intercepts? Because a model with only 4 random intecepts---as
+introducing rider intercepts? Because a model with only 4 random intercepts---as
 in the case of cluster intercepts---rather than several hundred---as in the case
 with rider intercepts---is much less flexible, we expect that the cluster intercept
 model will preform much worse. One still might suspect there is still a 
@@ -240,26 +255,26 @@ AIC, and AUC measures, shown in `r ref("cluster-model-fits", type = "table")`, a
 this clearly. Given that the rider-level predictors did not seem to be predictive
 of the rider intercepts, this is not a surprise.
 
-<!--
+
 \begin{table}[htb]
 \centering
 \caption{Model fit summaries for fixed intercept, rider random intercept, and
 cluster random intercepts.\label{tab:cluster-model-fits}}
-\begin{tabular}{lm{4in}rrr}
+\begin{tabular}{lm{3in}rrr}
 \toprule
 \textbf{Model} & \textbf{Separation Plot} & \textbf{$\log (\mathcal{L})$} & \textbf{AIC} &
 \textbf{AUC}\footnotemark\\
 \midrule
-Model 4 & \includegraphics{figure/rider-model1-sep.pdf}
+Model 4 & \includegraphics[width=3.1in]{figure/rider-model1-sep.pdf}
 & -4,266 & 8,549 & 0.805\\
-Model 6 & \includegraphics{figure/rider-model0-sep.pdf}
+Model 6 & \includegraphics[width=3.1in]{figure/rider-model0-sep.pdf}
 & -5,089 & 10,205 & 0.597\\
-Model 7 & \includegraphics{figure/rider-model2-sep.pdf}
+Model 7 & \includegraphics[width=3.1in]{figure/rider-model2-sep.pdf}
 & -4,973 & 9,965 & 0.646\\
 \bottomrule
 \end{tabular}
 \end{table}
 \footnotetext{Area under ROC curve for training data.}
 
--->
+
 

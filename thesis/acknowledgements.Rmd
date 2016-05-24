@@ -1,8 +1,15 @@
-We examine a dataset of crowdsourced commuter bicycle route ratings in Portland,
-OR. Multilevel model results show that ratings are best modelled when riders
-are modelled as having differing tendencies to rate their rides negatively. We
-also show that the majority of variation in ride ratings across time of day is
-owed to patterns in who is riding, rather than any effect particular to that
-day, such as traffic. A brief exploration in clustering shows that some small
-patterns in cyclists patterns can be picked out, but that these patterns do
-not provide much useful information to predict rider ratings. 
+
+<!-- people to thank:
+ - thesis advisor
+ - William Henderson and Evan at Ride Report
+ - My mom
+ - Kiki
+ - Rennie
+ - others
+ 
+ -->
+
+This thesis would not be possible without the generousity of William Henderson
+and Evan Heidtmann at Knock Software. 
+\newline
+This is another paragraph

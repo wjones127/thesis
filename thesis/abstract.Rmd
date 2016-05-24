@@ -1,8 +1,15 @@
-We examine a dataset of crowdsourced commuter bicycle route ratings in Portland,
-OR. Multilevel model results show that ratings are best modelled when riders
-are modelled as having differing tendencies to rate their rides negatively. We
+Crowdsourced ratings are an increasingly important data source, leveraging the 
+abundance of internet connected consumer devices to boost sample sizes. 
+In this paper, we examine a data set of crowdsourced bicycle route ratings in 
+Portland, OR collected by the \textit{Ride Report} app. 
+We fit multilevel models that show ratings are best described by models with 
+random intercepts by rider. We
 also show that the majority of variation in ride ratings across time of day is
-owed to patterns in who is riding, rather than any effect particular to that
-day, such as traffic. A brief exploration in clustering shows that some small
-patterns in cyclists patterns can be picked out, but that these patterns do
-not provide much useful information to predict rider ratings. 
+owed to patterns in who is riding, rather than any effect particular to that time of
+day, such as traffic. A brief exploration in clustering shows that some 
+trends in cyclist's ride length and time of day routines can be picked out, 
+but that these patterns do
+not provide much useful information for predicting rider ratings. Finally, we develop models
+that can adjust for non-ignorable missing ride ratings, but caution that their
+use for inference is inappropriate until the data quality of unrated rides
+can be assured.
