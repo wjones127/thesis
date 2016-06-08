@@ -165,21 +165,17 @@ Remove random rider intercepts from Model 4
 Rating}\label{ride-models}
 
 \textbf{Model 1}, which we will use as the baseline for comparing
-further models, is a multiple logistic regression model. Then, our first
-model will be,
+further models, is a logistic regression model:
 
-\[ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + X_i \beta),\]
-
-where \(\alpha \in \mathbb{R}\) and \(\beta \in \mathbb{R}^p\) are
-parameters to be estimated. (\(X\) is the matrix of rider-level
-predictors specified at the end of \autoref{data-notation}.)
+\[ \mathbb{P} (Y_i=1) = \text{logit}^{-1} (\alpha + X_i \beta),\] where
+\(\alpha \in \mathbb{R}\) and \(\beta \in \mathbb{R}^p\) are parameters
+to be estimated. (\(X\) is the matrix of ride-level predictors specified
+at the end of \autoref{data-notation}.)
 
 \begin{figure}[tbh]
 \centering
 \includegraphics[angle = 0,scale = 1]{figure/rider_avgs.pdf}
-\caption[The overall rates at which each rider gives a negative rating for a
-ride varies greatly. This is our primary motivation for including rider intercepts
-and predictors.]{\normalsize{The overall rates at which each rider gives a negative rating for a
+\caption[Distribution of Average Rider Rating]{\normalsize{The overall rates at which each rider gives a negative rating for a
 ride varies greatly. This is our primary motivation for including rider intercepts
 and predictors.}}
 \label{fig:rider-avgs}
@@ -206,24 +202,24 @@ rider intercepts, \(\alpha_j\), by specifying
 
 Starting with \textbf{Model 3}, we address time of day,
 \(t \in [0, 24)\) as a predictor. (We measure time of day in hours since
-midnight.) We use time of day to account for the all daily trends that
+midnight.) We use time of day to account for all the daily trends that
 may affect ratings, including as a simple way to model the overall
 traffic level, which is difficult to model on its own. These patterns
-are cyclic and very non-linear, so we can't time as a linear term. One
-approach is to add sinusoidal terms with a period of one day. We would
-be interested in fitting a term,
+are cyclic and very non-linear, so we can't model time as a linear term.
+One approach is to add sinusoidal terms with a period of one day. We
+would be interested in fitting a term,
 
 \[\beta \sin (T x^{\text{time}} + \phi).\]
 
 Estimating \(\beta\) wouldn't be hard: we can easily estimate
-coefficents of tranformed terms; it's more difficult to estimate \(T\)
+coefficents of transformed terms; it's more difficult to estimate \(T\)
 and \(\phi\). But, we know that we want to restrict our terms to fitting
 trends that happen over the course of one day, so we can set
 \(T = 2 \pi / d\), where \(d\) is 24 hours or some fraction of that.
 
-As for \(\phi\), a trignometric transformation reframes the estimation
+As for \(\phi\), a trigonometric transformation reframes the estimation
 of a phase shift parameter into the estimation of two coefficients for
-trignometric functions with no phase shift:
+trigonometric functions with no phase shift:
 
 \begin{align*}
 \beta \sin (T x + \phi) &= 
@@ -259,12 +255,14 @@ non-parametric smoother to model time of day, making our model,
 \begin{equation}
 y_i \sim \text{Bernoulli} \left(
 \text{logit}^{-1} \left( \alpha + \alpha_{j[i]} + X_i \beta + 
-f^\text{time} (t_i)  \right)
+X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+(1 - X^\text{weekend}) \cdot f^\text{time} (t_i) \right)
 \right),
 \end{equation}
 
 for \(i = 1, \ldots, n\), where \(\alpha_j\) is specified like Model 2
-and \(f^\text{time}\) is a cyclic cubic spline term, with knots at 0, 3,
+and \(f^\text{time.w}\) and \(f^\text{time}\) are cyclic cubic spline
+terms for weekend and weekday rides, respectively, with knots at 0, 3,
 6, 9, 12, 15, 18, 21, and 24 (0, again) hours.
 
 \textbf{Model 5} extends Model 4 by adding a cubic spline for
@@ -272,8 +270,22 @@ ride\_length:
 
 \begin{equation}
 y_i \sim \text{Bernoulli} \left(
+\text{logit}^{-1} \left( \begin{split} 
+&\alpha + \alpha_{j[i]} + X_i \beta + 
+f^\text{length} (x^\text{log.length}_i) +\\
+&X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+(1 - X^\text{weekend}) \cdot f^\text{time} (t_i)
+\end{split}
+\right)
+\right),
+\end{equation}
+
+\begin{equation}
+y_i \sim \text{Bernoulli} \left(
 \text{logit}^{-1} \left( \alpha + \alpha_{j[i]} + X_i \beta + 
-f^\text{time} (t_i) + f^\text{length} (x^\text{log.length}_i)  \right)
+X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+(1 - X^\text{weekend}) \cdot f^\text{time} (t_i)
++ f^\text{length} (x^\text{log.length}_i)  \right)
 \right),
 \end{equation}
 
@@ -321,37 +333,42 @@ Model 6 & \includegraphics{figure/model6-sep.pdf}
 
 \footnotetext{Area under ROC curve estimated with  10-fold cross-validation.}
 
-To fit the data, we got all of the rides in Portland, OR from December
-3, 2014 to February 8, 2016 for riders that had over 20 rated rides.
-There were 25,397 rides, 14,032 of which were rated. Overall, 10.88
-percent of these rides were given a negative rating. There were 138
-riders in the data set.
+To fit the data, we got all of the rides in Portland, OR, from December
+3, 2014 to February 8, 2016 for riders that had over 20 rated rides. (We
+only look at riders with a certain number of rides to make sure we get
+can get estimates for rider-level parameters, like rider random
+intercepts, that aren't too uncertain.) There were 25,397 rides, 14,032
+of which were rated. Overall, 10.88 percent of these rides were given a
+negative rating. There were 138 riders in the data set.
 
 The separation plots in \autoref{tab:modelfits} give a clear initial
 picture of how these model fits compare. Model 1 performs very poorly
 compared to those that include rider intercepts, assigning the same
 probability to most observations. Models that include the rider
-intercept perform similarly to each other. The log likelihoods and AIC
-scores, shown in \autoref{tab:modelfits}, corroborate this. Adding time
-dependency doesn't seem to impact predictive ability. We will see later,
-however, that it gives a fascinating result to interpret.
+intercept perform similarly to each other. The log likelihoods and
+AIC,\footnote{Akaike Information Criterion (AIC) is a metric that
+  penalizes the \(\log (\mathcal{L})\) with the number of parameters
+  estimated \(k\), with lower values being better. It is defined as
+  \(\text{AIC} = 2k - 2 \log(\mathcal{L})\).} shown in
+\autoref{tab:modelfits}, corroborate this. Adding time dependency
+doesn't seem to impact predictive ability. We will see later, however,
+that it gives a fascinating result to interpret.
 
 The gains from the rider intercepts are great, but we are compelled to
 ask: how much of that gain could have been achieved with randomly chosen
-groups? \textit{i.e.} if riders were randomly assigned to rides, would
+groups? In other words, if riders were randomly assigned to rides, would
 the flexibility in the model created by allowing intercepts to vary
 increase predictive performance to the same degree? To test this, we ran
-a Model 4 after we randomly assign the rides a rider. This quick test
-nullified this skepticism, as you can see in the resulting separation
-plots in \autoref{fig:sep-plots-intercept-test}.
+a Model 4 after we randomly assign the rides a rider, by randomly
+permuting the rider column. This quick test nullified this skepticism,
+as you can see in the resulting separation plots in
+\autoref{fig:sep-plots-intercept-test}.
 
 \begin{figure}[tbh]
 \centering
 \includegraphics[angle = 0,scale = 1]{figure/intercept_test_plot.pdf}
 \caption[Separation plots for models 2 compared to a similar model where
-riders are randomly assigned to rides. This test demonstrates that the 
-improvement in predictive performance provided by the rider intercepts
-was not coincidence.]{\normalsize{Separation plots for models 2 compared to a similar model where
+riders are randomly assigned to rides]{\normalsize{Separation plots for models 2 compared to a similar model where
 riders are randomly assigned to rides. This test demonstrates that the 
 improvement in predictive performance provided by the rider intercepts
 was not coincidence.}}
@@ -395,28 +412,45 @@ Intercept & -2.2868 & -3.075 & -3.127 & -2.313\\
 \end{table}
 
 \autoref{tab:modelcoef} presents the fixed effect estimates for our
-models.
+models. Length has a robust strong negative effect. This makes sense if
+we think of length as the only information we have about route in these
+models: it seems routes that are longer tend to be less likely to be
+rated negatively. Perhaps longer rides tend to be for leisure or sport
+rather than commuting, so and so are less likely to go along routes with
+high traffic and other dangers. Temperature also seems to have a small
+effect. It could be the case that the temperature itself is important,
+or perhaps season is a confounding factor. It could be the case that the
+type of rides taken during the warmer months are more likely to be rated
+negatively. Wind and gust speed don't seem to have robust effects. These
+models suggest that four hour cumulative rainfall was more important
+than rainfall during the hour of the ride. This supports our suspicion
+that weather effects that are more relevant to safety than comfort---
+like wet road and puddles rather than rain at the time of a ride---are
+important in determining a cyclist's rating of their ride. These
+coefficients, however, aren't nearly as enlightening as the time of day
+fits.
 
 \begin{figure}[htb]
 \centering
 \includegraphics{figure/time_fit_plot.pdf}
 \includegraphics{figure/time_fit_plot_6.pdf}
-\caption{Predicted probabilities of a negative rating by time for a typical ride.
+\caption[Predicted probabilities of a negative rating by time for a typical ride]{
+Predicted probabilities of a negative rating by time for a typical ride.
 The rider was chosen so the intercept was closest to the mean intercept for model
 5. The median length and average mean temperature were used, and all other
 predictors were set to zero. The dotted lines show $\pm 2$ standard errors from
-the predictions.}
+the predictions.\label{fig:model-time-fit}}
 \end{figure}
 
 The marginal fits for time of day, shown in
-\autoref{fig:model1-time-fit}, are predictable. On weekdays, the
+\autoref{fig:model-time-fit}, are predictable. On weekdays, the
 probability of a negative rating peaks in the afternoon from 4--6 p.m.,
 around when we expect rush hour traffic, and on weekends it stays steady
 throughout the day. While Model 4 and Model 5 give similar fits for time
 of day, Model 3's predictions peak at different times on weekdays and
 exhibit much more variability on weekends. There are two probable
 reasons for these differences: first, the sinusoidal terms are less
-flexibile than the splines; second, the splines, because they are
+flexible than the splines; second, the splines, because they are
 non-parametric functions, penalize complexity of the fit while the
 parametric sinusoidal form does not, making the splines more
 conservative in their ``curviness.'' The former explains the
@@ -427,55 +461,50 @@ the functional form to any strict parametric form.
 
 But these marginal time-of-day fits don't just tell a story about our
 time terms; they also reveal part of why the random rider intercepts are
-such powerful predictors. Notice that in comparing
-\autoref{fig:model1-time-fit6} to \autoref{fig:model1-time-fit}, the
-scale at which the Model 6 time fitted probabilities vary is much larger
-than the scale at which the other models' predictions vary. (The
-differences is so large we had to show them in separate plots!) Without
-allowing for varying rider intercepts, the time terms take on a
-significant role. Yet, interestingly, the time term has nowhere near the
-amount of information that the rider intercepts seem to encode,
-according to the separation plots in \autoref{tab:modelfits}.
+such powerful predictors. Notice that in comparing Model 6 to the other
+models in \autoref{fig:model-time-fit}, the scale at which the Model 6
+time fitted probabilities vary is much larger than the scale at which
+the other models' predictions vary. Without allowing for varying rider
+intercepts, the time terms take on a significant role. Yet,
+interestingly, the time term has nowhere near the amount of information
+that the rider intercepts seem to encode, according to the separation
+plots in \autoref{tab:modelfits}.
 
 \begin{figure}[tbh]
 \centering
 \includegraphics[angle = 0,scale = 1]{figure/time_pred_plot.pdf}
-\caption[Each of the models predictions for all rides with time of day on the x-axis.
-Notice how starting with model 2, daily trends start to emerge. This indicates that the
-rider intercepts are picking up on time of day trends, which must be reflected in riders
-typical ride.]{\normalsize{Each of the models predictions for all rides with time of day on the x-axis.
-Notice how starting with model 2, daily trends start to emerge. This indicates that the
-rider intercepts are picking up on time of day trends, which must be reflected in riders
+\caption[Predicted probabilities of negative rating by time of day for Models 3--6]{\normalsize{Predicted probabilities of negative rating by time of day for Models 3--6.
+Notice how starting with Model 2, daily trends start to emerge. This indicates that the
+rider intercepts are picking up on time of day trends, which must be reflected in a rider's
 typical ride.}}
 \label{fig:time-pred-plot}
 \end{figure}
 
-A clearer picture of what is going on is painted in
-\autoref{fig:time-pred-plot}. The predictions of Model 1, which has a
-fixed intercept and no time dependence, don't vary by time of day. The
-models with random intercepts (2--5) show strong temporal patterns, with
-concentrated spikes in the morning and evening. Model 6, which had the
-time of day spline but a fixed intercept, has a temporal pattern, but
-does not represent the same degree time dependence that the random
-intercept models do.
+\autoref{fig:time-pred-plot} paints a clearer picture of what is going
+on. These models show two different ways to look at the time of day
+pattern in ride rating: Model 2 suggests \emph{who is riding} determines
+these patterns while Model 6 suggests there is something inherent in
+that time of day, such as traffic, that determines these patterns. The
+models between fit a combination of these, but as we saw in
+\autoref{fig:model-time-fit}, the time dependence is more than an order
+of magnitude weaker after accounting for the rider intercepts. The two
+black pillars of rides in the predictions of Models 2--5 line up with
+when we expect commuters to be riding, suggesting that that the riders
+with high rider intercepts are commuters. The converse, however, is not
+true: a great number of rides during commuting times are predicted to
+have almost zero probability of receiving a negative rating.
 
-One should be cautious about interpreting the intercepts. It's tempting
-to say they represent a riders general tendency to rate rides
-negatively, but this is ignoring their typical route. Just like how
-figure \autoref{fig:time-pred-plot} demonstrates that riders have unique
-patterns of what times of days they take rides, riders also likely have
-very particular routes that make up the majority of their rides. Because
-our models do not take into account the route, the intercepts are likely
-encoding the information about a riders typical route.
-
-The fact that riders have apparent patterns of time of ride (and very
-likely route of ride), indicates there will be some value in trying to
-differentiate the types of riders that are present in this data. Indeed,
-one way of looking at the range of probabilities of giving a negative
-rating different riders have (demonstrated in figure
-\autoref{fig:rider-pred}) is that some are more likely to offer useful
-information. In the next chapter, we will attempt to pick apart
-different groups of riders, and attempt to characterize their patterns
-of when and how long they ride.
+What explains this relationship between the temporal patterns and the
+rider intercepts? We suspect ride route is a confouding factor here.
+\autoref{fig:time-pred-plot} confirms our suspicion that riders have
+particular schedules they stick to; so it's also likely, given that
+these are mostly commuting cyclists, that most of their rides follow the
+same route as well. These models ignore ride route, so we suspect the
+typical ride route is encoded in the rider intercepts; \emph{i.e.} a
+rider whose commuting route goes through many of the most stressful
+intersections and streets in Portland will likely have a higher
+intercept than most riders. This hypothesis can only be tested, however,
+when future research develops models with random rider intercepts and a
+model for how routes effect ratings.
 
 \end{document}

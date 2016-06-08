@@ -1062,10 +1062,13 @@ unrated rides can be assured.
   
   \begin{equation}
   y_i \sim \text{Bernoulli} \left(
-  \text{logit}^{-1} \left( \alpha + \alpha_{j[i]} + X_i \beta + 
-  X^\text{weekend} \cdot f^\text{time.w} (t_i) +
+  \text{logit}^{-1} \left( \begin{split} 
+  &\alpha + \alpha_{j[i]} + X_i \beta + 
+  f^\text{length} (x^\text{log.length}_i) +\\
+  &X^\text{weekend} \cdot f^\text{time.w} (t_i) +
   (1 - X^\text{weekend}) \cdot f^\text{time} (t_i)
-  + f^\text{length} (x^\text{log.length}_i)  \right)
+  \end{split}
+  \right)
   \right),
   \end{equation}
   
