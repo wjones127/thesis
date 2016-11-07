@@ -4,24 +4,28 @@ author: "Will Jones"
 output: revealjs::revealjs_presentation
 ---
 
+## About This Research
+
+- This work is from my undergraduate thesis at Reed College
+- Was advised by Andrew Bray
+
 ## Ride Report and the Stress Map
 
-![](../thesis/figure/stress_map.png)
+![](images/ride_report.jpg)
 
 ## Three Main Challenges
 
 (1) **Develop model for data collection process**
-(2) **Match routes to road network**
-(3) **Develop model for routes**
+(2) Adapt algorithm for map matching
+(3) Develop model for routes
 
-> - Step (3) will require careful thinking: large num of parameters.
-> - Step (2) is a software dev challenge. Need more general implementation.
-> - Step (1) was the focus of our research.
+<!--
+## The Data
 
-## Data Collection
+1. Rides from Knock Software
+2. Daily weather summaries from Weather Underground
+3. Hourly percipitation data from local fire station
 
-- Rides from Ride Report App
-- Weather from local weather stations
 
 ## How a ride is recorded
 
@@ -33,20 +37,28 @@ output: revealjs::revealjs_presentation
 > 6. Route uploaded and matched to OSM road network.
 
 ## The Tradeoff
-> - Only 1 human step -> larger sample size
-> - But more data does not always mean quality data:
->     * You aren't measuring what you think you are measuring
->     * ML Models make errors
+> - Only 1 step needs a human, so sample size is larger.
+> - But this comes at the cost of quality in two ways:
+>     1. Ratings measure more than just effect of route
+>     2. Errors in ML models have implications for our model
+
+-->
 
 ## Modeling Goals
 
-Correct for:
+### Correct for:
 
 > - riders' differing rating criteria
-> - weather: avg. temp, wind speed, rainfall, recent rainfall
 > - ride length
-> - time of day (traffic, visibility, etc.)
-> - nonresponse
+> - time of day (for traffic and maybe other things)
+> - weather:
+>     * Daily: avg. temp, mean wind speed, max gust speed
+>     * Hourly: rainfall during ride, rainfall past 4 hours
+
+### How to model?
+> - weather + ride length with linear predictors
+> - riders with random intercepts
+> - time of day effect with cyclic splines (by weekday/weekend)
 
 
 ## A Logistic Regression Model
@@ -54,23 +66,21 @@ Correct for:
 > - $y_i$ are ratings
 > - $X$ are ride predictors
 > - $j[i]$ is the rider of the $i$th ride
-> - $t$ is the start time of day in hours
+> - $t_i$ is the start time of ride $i$ in hours
+> - $w_i$ is an indicator for weekend
 
-$$y_i \sim \text{Bernoulli}(p_i),$$
-$$\text{logit}(p_i) = \alpha_0 + \alpha_{j[i]} + X \beta + s(t),$$
-$$\alpha_{j[i]} \sim \text{Normal}(0, \sigma_\alpha^2).$$
 
-$s(t)$ is cyclic cubic spline, w/ knots at every 3 hours.
+<div class="fragment" style="padding:3%;">
+ $$y_i \sim \text{Bernoulli}(p_i),$$
+ $$\text{logit}(p_i) = \alpha_{j[i]} + \beta \cdot  X_i + s_{w_i}(t_i)$$
+ </div>
+ 
+> - $s_{w_i}(t)$ are two cyclic cubic splines, for weekdays and weekends, w/ knots at every 3 hours.
+> - Model fit with gamm4 package in R
 
 ## Linear predictors
 
-- Ride length
-- Rainfall & Rainfall 4 hour cumulative
-- Temperature, wind speed, gust speed
-
-<!-- Create a plot of predictor coefficients -->
-
-- Recent rainfall
+![](images/linear_predictors.png)
 
 ## Bike Lanes Flood!
 
@@ -80,31 +90,37 @@ Photo by Richard Drdul. (https://www.flickr.com/photos/drdul/177247505)
 
 ## Random Intercepts for Riders
 
-Going to assume that riders are consistent with own ratings, but have different
-baselines from each other. Thus, we will have an intercept for each riders. i.e.
+The random intercepts were very informative for the model:
 
-$$\text{logit} (p_i) = \alpha_0 + \alpha_{j[i]} + X \beta + s(t)$$
+<table>
+<thead>
+<tr><th>$\alpha_{j[i]}$</th><th>$\beta X_i$</th><th>$s_{w_i} (t_i)$</th><th>AIC</th></tr>
+</thead>
+<tbody>
+<tr><td>X</td><td>X</td><td>X</td><td>9096</td></tr>
+<tr><td></td><td>X</td><td>X</td><td>10755</td></tr>
+<tr><td>X</td><td></td><td>X</td><td>9127</td></tr>
+<tr><td>X</td><td>X</td><td></td><td>9153</td></tr>
+</tbody></table>
 
-$$\alpha_{j[i]} \sim N(0, \sigma_\alpha^2).$$
+> - Maybe: Effect of cyclists' typical route absorbed by intercept
 
 ## Cyclic Splines for Time of Day
 
-![](../thesis/figure/time_fit_plot.pdf)
+![](images/marginal_time.png)
 
 ## Time of Day and Riders
 
 ![](images/better_plot.png)
 
-## Missing Data and the EM Algorithm
-
-Used EM Algorithm.
-Didn't work well. Why?
-
-> Because of the misclassified rides
-
 ## Conclusion
 
-Future hypotheses to test when full model exists:
+> - This is a start towards a goal of building a better "Stress Map""
 
-- Variance of rider intercepts will be reduced
-- Time of day effects reduced
+
+Future models should:
+
+> - Make use of the rider intercepts, time of day splines, and weather data
+> - Use more granular weather data
+> - Be aware of the correlation between rider intercepts, time of day, and route
+
